@@ -1,0 +1,25 @@
+# Only what the build needs goes to Docker (job-hunt JH-80's shape).
+# Secrets and data: never in an image.
+.env
+.env.*
+**/.env
+**/.env.*
+data/
+# History, dependencies and build output: the image makes its own.
+.git
+.gitignore
+node_modules
+dist
+version.json
+# Tests, screenshots and the look scripts are not part of the running app.
+tests
+**/*.test.ts
+test-results
+docs/looks
+.vitest-results*.json
+vitest.config.ts
+tsconfig.check.json
+docs
+*.md
+scripts/*
+!scripts/build-version.mjs
