@@ -49,6 +49,7 @@ declare module "fastify" {
   interface FastifyContextConfig {
     /** Reachable without signing in. beatbranch is public by default (AB#4685): most GET pages say so. */
     public?: boolean;
+    multipart?: boolean;
   }
   interface FastifyInstance {
     /** Every route registered, in order: what the route inventory test holds the inventory to. */
@@ -208,7 +209,7 @@ export async function buildApp(config: Config, db: Db, options: { logStream?: No
   app.addHook("preHandler", async (req, reply) => {
     if (!UNSAFE.has(req.method)) return;
     if (!sameOrigin(req, config)) return await refuse(req, reply, deps, 403, "That form did not come from this site, so it was not sent. Nothing was saved.");
-    if (req.session && csrfFrom(req) !== req.session.csrfToken) {
+    if (req.session && req.routeOptions.config?.multipart !== true && csrfFrom(req) !== req.session.csrfToken) {
       return await refuse(req, reply, deps, 403, "This form has expired. Reload the page and try again. Nothing was saved.");
     }
   });

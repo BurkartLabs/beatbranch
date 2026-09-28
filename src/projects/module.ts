@@ -6,9 +6,10 @@ import { refuse, render, type Deps, type Module } from "../app.js";
 import { getProfileByHandle } from "../auth/users.js";
 import { RATE_LIMITS, retryAfterSeconds, retryWords, takeLimit } from "../limits/limits.js";
 import { errorId, html, type Html } from "../web/html.js";
-import { DAWS, dawName, GENRE_NAMES, GENRES, STATES, stateName, VISIBILITIES } from "./catalogue.js";
-import { access, branchesOf, createProject, listPublic, listPublicOf, NewProject, tagsOf, type NewProjectInput } from "./repo.js";
-import { dayOf, projectGrid, visibilityBadge } from "./views.js";
+import { DAWS, GENRE_NAMES, GENRES, STATES, VISIBILITIES } from "./catalogue.js";
+import { access, createProject, listPublic, listPublicOf, NewProject, type NewProjectInput } from "./repo.js";
+import { projectPage } from "./page.js";
+import { dayOf, projectGrid } from "./views.js";
 
 const Params = z.object({ handle: z.string().max(30), slug: z.string().max(80) });
 
@@ -97,36 +98,7 @@ const projects: Module = {
       const { handle, slug } = Params.parse(req.params);
       const found = await access(deps.db, handle, slug, req.user);
       if (!found) return reply.callNotFound();
-      const { project, canEdit } = found;
-      const [branches, tags] = await Promise.all([branchesOf(deps.db, project.id), tagsOf(deps.db, project.id)]);
-      const facts: Html[] = [html`<span>${dawName(project.daw)}</span>`, html`<span>${stateName(project.state)}</span>`];
-      if (project.bpm) facts.push(html`<span>${String(project.bpm)} BPM</span>`);
-      if (project.musicalKey) facts.push(html`<span>${project.musicalKey}</span>`);
-      if (project.genre) facts.push(html`<span>${project.subgenre ? `${project.genre} · ${project.subgenre}` : project.genre}</span>`);
-      return render(
-        req,
-        reply,
-        deps,
-        { title: project.name, styles: ["/static/projects.css"] },
-        html`<section class="project-header">
-  <div>
-    <p class="muted crumbs"><a href="/@${project.ownerHandle}">${project.ownerName}</a> / ${project.name}</p>
-    <h1>${project.name} ${visibilityBadge(project)}</h1>
-    <p class="meta">${facts}<span>started ${dayOf(project.createdAt)}</span></p>
-    ${project.hiddenAt !== null ? html`<p class="flash error">This project is hidden from everyone but its members${project.hiddenReason ? html`: ${project.hiddenReason}` : ""}.</p>` : ""}
-  </div>
-  <div class="project-actions">
-    <label class="visually-hidden" for="branch">Branch</label>
-    <select id="branch" name="branch" class="branch-select" aria-label="Branch">${branches.map((b) => html`<option value="${b.name}">${b.name}</option>`)}</select>
-    ${canEdit ? html`<a class="button" href="${`/p/@${project.ownerHandle}/${project.slug}/settings`}">Settings</a>` : ""}
-  </div>
-</section>
-${project.description ? html`<section class="panel"><p class="description">${project.description}</p>${tags.length ? html`<p class="tags">${tags.map((t) => html`<span class="tag">${t}</span>`)}</p>` : ""}</section>` : tags.length ? html`<section class="panel"><p class="tags">${tags.map((t) => html`<span class="tag">${t}</span>`)}</p></section>` : ""}
-<section class="panel">
-  <h2>Commits</h2>
-  <p class="empty">No commits yet on <code>main</code>.${canEdit ? " The first commit is the project file itself; committing arrives next." : ""}</p>
-</section>`
-      );
+      return projectPage(req, reply, deps, found);
     });
 
     app.get("/explore", { config: { public: true } }, async (req, reply) => {
