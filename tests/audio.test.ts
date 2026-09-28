@@ -40,8 +40,8 @@ describe("listening (AB#3142, 3662, 3668, 3676, 3682, 3687, 3694)", () => {
     const r = await postMultipart(app, "/p/@alice/beat/commit", alice, [
       { name: "message", value: "with stems" },
       { name: "project", filename: "b.flp", data: fixtureFlp() },
-      { name: "stems", filename: "drums.wav", data: wav("drums", 8000) },
-      { name: "stems", filename: "bass.wav", data: wav("bass", 8000) }
+      { name: "stems", filename: "drums.wav", data: wav("drums", 200000) },
+      { name: "stems", filename: "bass.wav", data: wav("bass", 200000) }
     ]);
     expect(r.statusCode).toBe(303);
     expect(await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM audio_peaks")).toEqual({ n: 2 });
@@ -65,11 +65,12 @@ describe("listening (AB#3142, 3662, 3668, 3676, 3682, 3687, 3694)", () => {
     expect(page).toContain('class="master"');
   });
 
-  it("says instrument tracks are needed for a project with synths and nothing to play", async () => {
+  it("plays a project with only synths as a sketch, and says which instruments use stand-in sounds (Bug AB#4763)", async () => {
     const r = await postMultipart(app, "/p/@alice/beat/commit", alice, [{ name: "message", value: "synths only" }, { name: "project", filename: "b.flp", data: fixtureFlp() }]);
     const page = (await get(app, String(r.headers.location))).body;
-    expect(page).toContain("uses instruments like synths");
-    expect(page).not.toContain("data-player");
+    expect(page).toContain("data-player");
+    expect(page).toContain("The song");
+    expect(page).toMatch(/simple stand-in sounds?, because only FL Studio can play/);
   });
 
   it("mixes a playable preview from the samples of a sample-only project", async () => {
@@ -79,15 +80,19 @@ describe("listening (AB#3142, 3662, 3668, 3676, 3682, 3687, 3694)", () => {
       { name: "samples", filename: "samples.zip", data: zip([{ name: "Samples/loop.wav", data: wav("loop", 16000) }]) }
     ]);
     const page = (await get(app, String(r.headers.location))).body;
-    expect(page).toContain("Preview mix");
+    expect(page).toContain("The song");
     const src = /data-src="([^"]+)"/.exec(page)![1]!.replace(/&amp;/g, "&");
     const hop = await get(app, src, alice);
     expect(hop.statusCode).toBe(303);
     const audio = await get(app, String(hop.headers.location), alice);
     expect(audio.statusCode).toBe(200);
-    expect(audio.headers["content-type"]).toBe("audio/wav");
-    expect(audio.rawPayload.subarray(0, 4).toString("latin1")).toBe("RIFF");
-    expect(audio.rawPayload.length).toBe(44 + 44100 * 4 * 2);
+    if (hasFfmpeg) {
+      expect(audio.headers["content-type"]).toBe("audio/mpeg");
+      expect(audio.rawPayload.length).toBeGreaterThan(1000);
+    } else {
+      expect(audio.headers["content-type"]).toBe("audio/wav");
+      expect(audio.rawPayload.subarray(0, 4).toString("latin1")).toBe("RIFF");
+    }
   });
 
   it("decodes in a separate worker, and a broken audio file fails there without harming the server", async () => {

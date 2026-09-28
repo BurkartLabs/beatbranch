@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Deps } from "../app.js";
-import { makePeaks, makePreview } from "../audio/module.js";
+import { prepareListening } from "../audio/module.js";
 import { storeOf } from "../commits/module.js";
 import { filesOf, setModel } from "../commits/repo.js";
 import { loadConfig, secret } from "../config.js";
@@ -38,11 +38,7 @@ async function main() {
         if (r.ok) await setModel(db, c.id, "ok", r.model);
         else await setModel(db, c.id, "unsupported" in r && r.unsupported ? "unsupported" : "failed", { error: r.reason });
       }
-      for (const f of files) if (f.kind === "stem" || f.kind === "bounce") await makePeaks(deps, f.hash, local.get(f.hash)!);
-      if (!files.some((f) => f.kind === "stem" || f.kind === "bounce")) {
-        await db.run("DELETE FROM commit_previews WHERE commit_id = ?", [c.id]);
-        await makePreview(deps, c.id, files.filter((f) => f.kind === "samples" || (f.kind === "project" && f.contentType === "application/zip")).map((f) => local.get(f.hash)!));
-      }
+      await prepareListening(deps, c.id, files, local);
       done++;
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

@@ -37,7 +37,7 @@ describe("FL Studio (AB#3448, 3458, 3470, 3482, 3490, 3504)", () => {
     expect(m.samples).toEqual([{ path: "C:\\Samples\\kick.wav", name: "kick.wav", bundled: true }]);
     expect(parseFlp(fixtureFlp()).samples[0]!.bundled).toBe(false);
     const drop = m.patterns.find((p) => p.name === "Drop")!;
-    expect(drop.notes.filter((n) => n.key === 41)).toEqual([{ start: 0, length: 2, key: 41, velocity: 110 / 128 }]);
+    expect(drop.notes.filter((n) => n.key === 41)).toEqual([{ start: 0, length: 2, key: 41, velocity: 110 / 128, track: "ch1" }]);
     expect(drop.notes.map((n) => n.key)).toEqual([36, 36, 41, 44]);
   });
   it("validates against the shared model", () => {
