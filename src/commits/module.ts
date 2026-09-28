@@ -31,7 +31,7 @@ async function find(req: FastifyRequest, deps: Deps, params: { handle: string; s
   return access(deps.db, params.handle, params.slug, req.user);
 }
 
-function commitForm(a: Access, branches: string[], branch: string, csrf: string, used: number, quota: number): Html {
+function commitForm(a: Access, branches: string[], branch: string, csrf: string, used: number, quota: number, mergeOf: { id: string; idea: string } | null = null): Html {
   const p = a.project;
   const accept = p.daw === "fl-studio" ? ".flp,.zip" : p.daw === "ableton" ? ".als,.zip" : p.daw === "reaper" ? ".rpp,.zip" : p.daw === "studio-one" ? ".song,.zip" : p.daw === "bitwig" ? ".bwproject,.zip" : p.daw === "logic" ? ".zip" : ".flp,.als,.rpp,.song,.bwproject,.zip";
   return html`<section class="panel narrow">
@@ -40,6 +40,7 @@ function commitForm(a: Access, branches: string[], branch: string, csrf: string,
   <p class="muted">A save keeps this version of your song forever, so you can always go back to it.</p>
   <form method="post" action="${projectPath(p)}/commit" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="${csrf}">
+    ${mergeOf ? html`<input type="hidden" name="merge" value="${mergeOf.id}"><p class="flash ok">This save combines the Main version with the idea “${mergeOf.idea}”. Upload the project file you combined.</p>` : ""}
     <label for="branch">Save it to</label>
     <select id="branch" name="branch">${branches.map((b) => html`<option value="${b}"${b === branch ? html` selected` : ""}>${ideaName(b)}</option>`)}</select>
     <label for="message">What did you change?</label>
@@ -67,10 +68,11 @@ class Refused extends Error {
   }
 }
 
-async function stage(req: FastifyRequest, deps: Deps, a: Access, dir: string): Promise<{ branch: string; message: string; files: StagedFile[]; temps: Map<string, string> }> {
+async function stage(req: FastifyRequest, deps: Deps, a: Access, dir: string): Promise<{ branch: string; message: string; merge: string; files: StagedFile[]; temps: Map<string, string> }> {
   let first = true;
   let branch = "main";
   let message = "";
+  let merge = "";
   const files: StagedFile[] = [];
   const temps = new Map<string, string>();
   for await (const part of req.parts({ limits: { fileSize: MAX_FILE_BYTES, files: MAX_STEMS + 3, fields: 8, fieldSize: 4096, parts: MAX_STEMS + 12 } })) {
@@ -82,6 +84,7 @@ async function stage(req: FastifyRequest, deps: Deps, a: Access, dir: string): P
     if (part.type === "field") {
       if (part.fieldname === "branch") branch = String(part.value).slice(0, 80);
       if (part.fieldname === "message") message = String(part.value);
+      if (part.fieldname === "merge") merge = String(part.value).slice(0, 40);
       continue;
     }
     const kind = FIELD_KINDS[part.fieldname];
@@ -113,7 +116,7 @@ async function stage(req: FastifyRequest, deps: Deps, a: Access, dir: string): P
     files.push({ kind, name, hash: digest, size, contentType: judged.contentType });
   }
   if (first) throw new Refused(403, "This form has expired. Reload the page and try again. Nothing was saved.");
-  return { branch, message, files, temps };
+  return { branch, message, merge, files, temps };
 }
 
 export function storeOf(deps: Deps): BlobStore {
@@ -131,7 +134,9 @@ const commits: Module = {
       if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the song's owner and collaborators can save new versions.", { href: projectPath(a.project), label: "Back to the project" });
       const branches = (await branchesOf(deps.db, a.project.id)).map((b) => b.name);
       const want = String((req.query as { branch?: string }).branch ?? "main");
-      return render(req, reply, deps, { title: `Save · ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), deps.config.storageQuotaBytes));
+      const mergeId = String((req.query as { merge?: string }).merge ?? "").slice(0, 40);
+      const mergeCommit = mergeId ? await getCommit(deps.db, a.project.id, mergeId) : null;
+      return render(req, reply, deps, { title: `Save · ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), deps.config.storageQuotaBytes, mergeCommit ? { id: mergeCommit.id, idea: mergeCommit.branchName } : null));
     });
 
     await app.register(async (scope) => {
@@ -172,7 +177,13 @@ const commits: Module = {
           }
           const store = storeOf(deps);
           for (const [hash, temp] of staged.temps) await store.putFile(hash, temp);
-          const commit = await createCommit(deps.db, { projectId: a.project.id, branchName: staged.branch, authorId: req.user!.id, message, files: staged.files, parseStatus: "pending" });
+          let parent2: string | null = null;
+          if (staged.merge) {
+            const other = await getCommit(deps.db, a.project.id, staged.merge);
+            if (!other) throw new Refused(400, "The idea you're combining isn't in this song.");
+            parent2 = other.id;
+          }
+          const commit = await createCommit(deps.db, { projectId: a.project.id, branchName: staged.branch, authorId: req.user!.id, message, files: staged.files, parseStatus: "pending", parent2Id: parent2 });
           await afterCommit(deps, a.project, commit, staged.files, staged.temps);
           return reply.redirect(`${projectPath(a.project)}/c/${commit.id}`, 303);
         } catch (error) {

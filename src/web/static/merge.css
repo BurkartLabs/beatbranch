@@ -1,0 +1,4 @@
+.picks { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+.picks th, .picks td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); }
+.picks th { font-weight: 600; color: var(--muted); font-size: 0.9rem; }
+.picks td:not(:first-child), .picks th:not(:first-child) { text-align: center; width: 9rem; }

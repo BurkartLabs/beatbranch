@@ -50,7 +50,7 @@ function pianoRoll(p: Pattern, color: string): Html {
   return trusted(`<div class="pr-scroll"><svg class="pr-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${p.notes.length} notes">${grid.join("")}${notes.join("")}${labels.join("")}</svg></div>`);
 }
 
-export function renderModel(m: Model, prefix = ""): Html {
+export function renderModel(m: Model, prefix = "", mark: { changed?: Set<string>; added?: Set<string> } = {}): Html {
   const width = Math.max(m.lengthBeats, 16);
   const facts: Html[] = [];
   facts.push(html`<span><strong>${m.tempo ? `${Math.round(m.tempo * 100) / 100} BPM` : "Tempo unknown"}</strong></span>`);
@@ -66,8 +66,8 @@ export function renderModel(m: Model, prefix = ""): Html {
   ${m.metadataOnly ? html`<p class="flash ok">${m.notes.filter((n) => /private format/.test(n)).join(" ") || "BeatBranch can only see this project's details, not its tracks."}</p>` : ""}
   ${m.notes.filter((n) => !/private format/.test(n)).map((n) => html`<p class="muted">${n}</p>`)}
   ${m.tracks.length ? html`<div class="lanes" role="list">
-    ${m.tracks.map((t, i) => html`<div class="lane" role="listitem" id="${prefix}lane-${slug(t.id)}">
-      <a class="lane-name" href="#${prefix}track-${slug(t.id)}"><span class="swatch swatch-${String(i % PALETTE.length)}"></span>${t.name}</a>
+    ${m.tracks.map((t, i) => html`<div class="lane${mark.added?.has(t.id) ? " lane-added" : mark.changed?.has(t.id) ? " lane-changed" : ""}" role="listitem" id="${prefix}lane-${slug(t.id)}">
+      <a class="lane-name" href="#${prefix}track-${slug(t.id)}"><span class="swatch swatch-${String(i % PALETTE.length)}"></span>${t.name}${mark.added?.has(t.id) ? html` <span class="badge badge-ok">new</span>` : mark.changed?.has(t.id) ? html` <span class="badge badge-changed">changed</span>` : ""}</a>
       <div class="lane-track">${lane(t, i, width, prefix)}</div>
     </div>`)}
   </div>
