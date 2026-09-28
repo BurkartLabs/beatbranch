@@ -96,7 +96,7 @@ const diff: Module = {
         req,
         reply,
         deps,
-        { title: `What changed · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css", "/static/view.css", "/static/diff.css"], scripts: ["/static/player.mjs"] },
+        { title: `What changed · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css", "/static/diff.css"], scripts: ["/static/player.mjs"] },
         html`${head}
 ${ab}
 <section class="panel"><h2>Inside the project</h2>${structural}</section>

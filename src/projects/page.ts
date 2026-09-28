@@ -56,7 +56,7 @@ export async function projectPage(req: FastifyRequest, reply: FastifyReply, deps
     req,
     reply,
     deps,
-    { title: project.name, styles: ["/static/projects.css", "/static/player.css", "/static/view.css"], scripts: ["/static/branch.js", "/static/player.mjs", "/static/view.js"] },
+    { title: project.name, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/branch.js", "/static/player.mjs", "/static/view.js"] },
     html`<section class="project-header">
   ${project.hasCover ? html`<img class="cover" src="${base}/cover.png" alt="Picture for ${project.name}" width="96" height="96">` : ""}
   <div class="grow">

@@ -9,6 +9,8 @@ export const EV = {
   TIMESIG_BEAT: 18,
   CHAN_FX: 22,
   CHAN_TYPE: 21,
+  CHAN_NAME_OLD: 192,
+  STEP_OLD: 91,
   SLOT_INDEX: 98,
   ARR_NEW: 99,
   INSERT_OUTPUT: 147,
@@ -98,6 +100,19 @@ function versionUtf16(v: string): boolean {
   return maj! > 11 || (maj === 11 && (min ?? 0) >= 5);
 }
 
+const PLAUSIBLE_TICKS = 1 << 27;
+
+export function playlistItemSize(d: Buffer): 32 | 60 | 0 {
+  const fits = (size: 32 | 60) => {
+    if (d.length === 0 || d.length % size !== 0) return false;
+    for (let o = 0; o < d.length; o += size) if (d.readUInt32LE(o) >= PLAUSIBLE_TICKS || d.readUInt32LE(o + 8) >= PLAUSIBLE_TICKS) return false;
+    return true;
+  };
+  if (fits(60)) return 60;
+  if (fits(32)) return 32;
+  return 0;
+}
+
 export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Model {
   const { ppq, events: evs } = events(buf);
   const m = emptyModel("flp", "FL Studio");
@@ -113,6 +128,7 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
   let chan: Chan | null = null;
   const pats = new Map<number, { name: string; notes: { pos: number; len: number; key: number; vel: number; channel: number }[] }>();
   let pat: number | null = null;
+  let legacySteps = false;
   const items: { pos: number; len: number; ref: number; track: number }[] = [];
   const trackNames = new Map<number, string>();
   let trackIndex: number | null = null;
@@ -126,6 +142,7 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
       case EV.VERSION:
         version = text(e.data!, false);
         utf16 = versionUtf16(version);
+        legacySteps = !versionUtf16(version) || Number(version.split(".")[0]) < 12;
         m.app = `FL Studio ${version.split(".").slice(0, 2).join(".")}`;
         break;
       case EV.TEMPO_FINE:
@@ -154,6 +171,9 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
       case EV.SAMPLE_PATH:
         if (chan && mode === "channel") chan.sample = text(e.data!, utf16) || null;
         break;
+      case EV.CHAN_NAME_OLD:
+        if (mode === "channel" && chan && !chan.name) chan.name = text(e.data!, utf16);
+        break;
       case EV.PLUGIN_INTERNAL: {
         const name = text(e.data!, utf16);
         if (mode === "channel" && chan) chan.plugin = name || chan.plugin;
@@ -170,6 +190,11 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
         pat = e.value;
         if (!pats.has(pat)) pats.set(pat, { name: "", notes: [] });
         mode = "pattern";
+        break;
+      case EV.STEP_OLD:
+        if (legacySteps && chan && pat !== null && e.value >= 256 && e.value < 512) {
+          pats.get(pat)!.notes.push({ pos: ((e.value & 0xff) >> 1) * (ppq / 4), len: ppq / 4, key: 60, vel: 100, channel: chan.index });
+        }
         break;
       case EV.PAT_NAME:
         if (pat !== null) pats.get(pat)!.name = text(e.data!, utf16);
@@ -189,10 +214,16 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
         break;
       case EV.PLAYLIST: {
         const d = Buffer.from(e.data!.buffer, e.data!.byteOffset, e.data!.byteLength);
-        const size = d.length % 60 === 0 && d.length % 32 !== 0 ? 60 : d.length % 32 === 0 ? 32 : d.length % 60 === 0 ? 60 : 0;
+        const size = playlistItemSize(d);
         if (!size) throw new ParseError("the playlist is damaged");
+        const legacy = d.readUInt16LE(4) !== PATTERN_BASE;
         for (let o = 0; o < d.length; o += size) {
-          items.push({ pos: d.readUInt32LE(o), ref: d.readUInt16LE(o + 6), len: d.readUInt32LE(o + 8), track: 499 - d.readUInt16LE(o + 12) });
+          const row = d.readUInt16LE(o + 12);
+          items.push(
+            legacy
+              ? { pos: d.readUInt32LE(o), ref: PATTERN_BASE + (999 - row), len: d.readUInt32LE(o + 8), track: 999 - row }
+              : { pos: d.readUInt32LE(o), ref: d.readUInt16LE(o + 6), len: d.readUInt32LE(o + 8), track: 499 - row }
+          );
         }
         break;
       }
@@ -240,7 +271,16 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
     patterns.push({ id: String(index), name: p.name || `Pattern ${index}`, lengthBeats: Math.ceil(lengthBeats / 4) * 4, notes });
   }
 
-  m.mixer = inserts.map((ins, i): MixerChannel => ({ index: i, name: ins.name || (i === 0 ? "Master" : `Insert ${i}`), plugins: ins.plugins, sends: ins.sends.filter((s) => s !== i) }));
+  const signatures = new Map<string, number>();
+  for (const ins of inserts.slice(1)) {
+    const key = ins.sends.join(",");
+    signatures.set(key, (signatures.get(key) ?? 0) + 1);
+  }
+  const usual = [...signatures.entries()].sort((a, b) => b[1] - a[1])[0];
+  const everywhere = usual && usual[1] > inserts.length / 2 && usual[0] ? usual[0].split(",").map(Number) : [0];
+  const sendBase = inserts.length === 105 ? 100 : inserts.length === 127 ? 126 : -1;
+  const insertName = (i: number, name: string) => name || (i === 0 ? "Master" : sendBase > 0 && i >= sendBase && i < sendBase + 4 ? `Send ${i - sendBase + 1}` : `Insert ${i}`);
+  m.mixer = inserts.map((ins, i): MixerChannel => ({ index: i, name: insertName(i, ins.name), plugins: ins.plugins, sends: ins.sends.filter((s) => s !== i && !everywhere.includes(s)) }));
 
   const tracks: Track[] = chans.map((c) => {
     const ins = c.insert !== null ? m.mixer.find((x) => x.index === c.insert) ?? null : null;

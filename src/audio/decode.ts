@@ -87,6 +87,56 @@ export function decodeWithFfmpeg(file: string, seconds = 60, maxSeconds = 1800):
   });
 }
 
+export const VORBIS_IN_WAV = new Set([0x674f, 0x6750, 0x6751, 0x676f, 0x6770, 0x6771]);
+
+export function wavFormat(b: Buffer): number | null {
+  if (b.length < 12 || (ascii(b, 0, 4) !== "RIFF" && ascii(b, 0, 4) !== "RF64") || ascii(b, 8, 4) !== "WAVE") return null;
+  let at = 12;
+  while (at + 8 <= b.length) {
+    const id = ascii(b, at, 4);
+    const size = b.readUInt32LE(at + 4);
+    if (id === "fmt " && at + 10 <= b.length) {
+      const f = b.readUInt16LE(at + 8);
+      return f === 0xfffe && at + 8 + 26 <= b.length ? b.readUInt16LE(at + 8 + 24) : f;
+    }
+    at += 8 + size + (size % 2);
+  }
+  return null;
+}
+
+export function oggInsideWav(b: Buffer): Buffer | null {
+  const f = wavFormat(b);
+  if (f === null || !VORBIS_IN_WAV.has(f)) return null;
+  const i = b.indexOf("data", 12, "latin1");
+  if (i < 0) return null;
+  const d = b.subarray(i + 8);
+  const o = d.indexOf("OggS", 0, "latin1");
+  return o >= 0 ? d.subarray(o) : null;
+}
+
+export function browserSafe(b: Buffer): boolean {
+  const f = wavFormat(b);
+  if (f !== null) return f === 1 || f === 3;
+  if (ascii(b, 0, 4) === "fLaC") return true;
+  if (ascii(b, 0, 3) === "ID3" || (b[0] === 0xff && ((b[1] ?? 0) & 0xe0) === 0xe0)) return true;
+  return false;
+}
+
+export function transcodeToWav(input: string, output: string, seconds = 120): Promise<boolean> {
+  return new Promise((resolve) => {
+    const p = spawn(ffmpegPath(), ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input, "-vn", "-map_metadata", "-1", "-c:a", "pcm_s16le", "-f", "wav", output], { stdio: "ignore", windowsHide: true });
+    const t = setTimeout(() => p.kill("SIGKILL"), seconds * 1000);
+    p.on("error", () => {
+      clearTimeout(t);
+      resolve(false);
+    });
+    p.on("close", (code) => {
+      clearTimeout(t);
+      resolve(code === 0);
+    });
+  });
+}
+
 export async function decodeAny(file: string, head: Buffer, read: () => Buffer): Promise<Pcm> {
   if (ascii(head, 0, 4) === "RIFF" || ascii(head, 0, 4) === "RF64") {
     try {

@@ -28,8 +28,8 @@ describe("FL Studio (AB#3448, 3458, 3470, 3482, 3490, 3504)", () => {
   });
   it("captures mixer names and where each insert sends", () => {
     expect(m.mixer.map((x) => x.name)).toEqual(["Master", "Kick Bus", "Bass Bus", "Reverb"]);
-    expect(m.mixer[2]!.sends).toEqual([0, 3]);
-    expect(m.tracks[1]!.sends).toEqual(["Master", "Reverb"]);
+    expect(m.mixer[2]!.sends).toEqual([3]);
+    expect(m.tracks[1]!.sends).toEqual(["Reverb"]);
   });
   it("reads tempo, time signature, samples bundled or missing, and notes", () => {
     expect(m.tempo).toBe(140);
