@@ -196,6 +196,7 @@ ${projectGrid(list.slice(0, 60), html`Nothing here yet.`)}`);
         "SELECT r.id, r.reason, r.created_at, p.name, p.slug, u.handle, p.hidden_at FROM reports r JOIN projects p ON p.id = r.project_id JOIN users u ON u.id = p.owner_id WHERE r.resolved_at IS NULL ORDER BY r.created_at"
       );
       const pending = await deps.db.all<{ id: string; handle: string; display_name: string; created_at: number }>("SELECT id, handle, display_name, created_at FROM users WHERE verified_at IS NULL ORDER BY created_at");
+      const everyone = await deps.db.all<{ id: string; handle: string; display_name: string; plan: string }>("SELECT id, handle, display_name, plan FROM users ORDER BY created_at LIMIT 500");
       const csrf = req.session!.csrfToken;
       return render(req, reply, deps, { title: "Reports", styles: ["/static/projects.css", "/static/branches.css"] }, html`<h1>Reports</h1>
 <section class="panel">${reports.length ? html`<ul class="ideas">${reports.map((r) => html`<li class="idea-row"><div><a class="idea-name" href="/p/@${r.handle}/${r.slug}">${r.name}</a><p class="muted">${dayOf(Number(r.created_at))}: ${r.reason}</p></div>
@@ -203,7 +204,10 @@ ${projectGrid(list.slice(0, 60), html`Nothing here yet.`)}`);
 <form method="post" action="/admin/reports/${r.id}"><input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="action" value="dismiss"><button class="button quiet" type="submit">Nothing wrong</button></form></div></li>`)}</ul>` : html`<p class="empty">No open reports.</p>`}</section>
 <h2>Waiting to be approved</h2>
 <p class="muted">New accounts can make songs but can't upload until they're approved here, or they join a song by invite.</p>
-<section class="panel">${pending.length ? html`<ul class="ideas">${pending.map((u) => html`<li class="idea-row"><div><a class="idea-name" href="/@${u.handle}">${u.display_name}</a><p class="muted">@${u.handle} · joined ${dayOf(Number(u.created_at))}</p></div><form method="post" action="/admin/users/${u.id}/approve"><input type="hidden" name="_csrf" value="${csrf}"><button class="button primary" type="submit">Approve</button></form></li>`)}</ul>` : html`<p class="empty">Nobody waiting.</p>`}</section>`);
+<section class="panel">${pending.length ? html`<ul class="ideas">${pending.map((u) => html`<li class="idea-row"><div><a class="idea-name" href="/@${u.handle}">${u.display_name}</a><p class="muted">@${u.handle} · joined ${dayOf(Number(u.created_at))}</p></div><form method="post" action="/admin/users/${u.id}/approve"><input type="hidden" name="_csrf" value="${csrf}"><button class="button primary" type="submit">Approve</button></form></li>`)}</ul>` : html`<p class="empty">Nobody waiting.</p>`}</section>
+<h2>Storage plans</h2>
+<p class="muted">Free accounts get ${String(Math.round(deps.config.storageQuotaBytes / 1024 ** 3))} GB; Plus accounts get ${String(Math.round(deps.config.storageQuotaPlusBytes / 1024 ** 3))} GB. Nobody is charged: billing isn't built.</p>
+<section class="panel"><ul class="ideas">${everyone.map((u) => html`<li class="idea-row"><div><a class="idea-name" href="/@${u.handle}">${u.display_name}</a><p class="muted">@${u.handle} · ${u.plan === "plus" ? "Plus" : "Free"}</p></div><form method="post" action="/admin/users/${u.id}/plan"><input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="plan" value="${u.plan === "plus" ? "free" : "plus"}"><button class="button quiet" type="submit">${u.plan === "plus" ? "Move to Free" : "Move to Plus"}</button></form></li>`)}</ul></section>`);
     });
 
     app.post("/admin/reports/:id", async (req, reply) => {
@@ -214,6 +218,14 @@ ${projectGrid(list.slice(0, 60), html`Nothing here yet.`)}`);
       if (!r) return reply.callNotFound();
       if (b.action === "hide") await deps.db.run("UPDATE projects SET hidden_at = ?, hidden_reason = ? WHERE id = ?", [Date.now(), String(b.why ?? "").slice(0, 200), r.project_id]);
       await deps.db.run("UPDATE reports SET resolved_at = ? WHERE project_id = ? AND resolved_at IS NULL", [Date.now(), r.project_id]);
+      return reply.redirect("/admin/reports", 303);
+    });
+
+    app.post("/admin/users/:id/plan", async (req, reply) => {
+      if (req.user!.role !== "admin") return reply.callNotFound();
+      const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+      const plan = z.enum(["free", "plus"]).parse((req.body as { plan?: string }).plan);
+      await deps.db.run("UPDATE users SET plan = ? WHERE id = ?", [plan, id]);
       return reply.redirect("/admin/reports", 303);
     });
 

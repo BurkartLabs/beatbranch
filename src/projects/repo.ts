@@ -23,6 +23,7 @@ export interface Project {
   musicalKey: string;
   hiddenAt: number | null;
   hiddenReason: string;
+  hasCover: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -84,14 +85,14 @@ export function parseTags(text: string): string[] {
 type ProjectRow = {
   id: string; owner_id: string; owner_handle: string; owner_name: string; slug: string; name: string; visibility: Visibility; daw: DawId;
   genre: string; subgenre: string; description: string; state: StateId; bpm: number | null; musical_key: string;
-  hidden_at: number | null; hidden_reason: string; created_at: number; updated_at: number;
+  hidden_at: number | null; hidden_reason: string; has_cover: boolean; created_at: number; updated_at: number;
 };
 const SELECT = `SELECT p.id, p.owner_id, u.handle AS owner_handle, u.display_name AS owner_name, p.slug, p.name, p.visibility, p.daw, p.genre, p.subgenre,
-  p.description, p.state, p.bpm, p.musical_key, p.hidden_at, p.hidden_reason, p.created_at, p.updated_at FROM projects p JOIN users u ON u.id = p.owner_id`;
+  p.description, p.state, p.bpm, p.musical_key, p.hidden_at, p.hidden_reason, (p.cover_blob IS NOT NULL) AS has_cover, p.created_at, p.updated_at FROM projects p JOIN users u ON u.id = p.owner_id`;
 const toProject = (r: ProjectRow): Project => ({
   id: r.id, ownerId: r.owner_id, ownerHandle: r.owner_handle, ownerName: r.owner_name, slug: r.slug, name: r.name, visibility: r.visibility, daw: r.daw,
   genre: r.genre, subgenre: r.subgenre, description: r.description, state: r.state, bpm: r.bpm === null ? null : Number(r.bpm), musicalKey: r.musical_key,
-  hiddenAt: r.hidden_at === null ? null : Number(r.hidden_at), hiddenReason: r.hidden_reason, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at)
+  hiddenAt: r.hidden_at === null ? null : Number(r.hidden_at), hiddenReason: r.hidden_reason, hasCover: !!r.has_cover, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at)
 });
 
 /** Create the project, its main branch and its owner's membership together (AB#2913: every project starts with main). */

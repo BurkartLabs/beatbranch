@@ -11,10 +11,10 @@ export const ORIGIN = "http://127.0.0.1:4420";
 
 export type Person = { id: string; handle: string; cookie: string; csrf: string };
 
-export async function world(env: Record<string, string> = {}): Promise<{ app: FastifyInstance; db: PostgresDb; dataDir: string }> {
+export async function world(env: Record<string, string> = {}, options: { fetch?: typeof fetch } = {}): Promise<{ app: FastifyInstance; db: PostgresDb; dataDir: string }> {
   const db = await testDb();
   const dataDir = tempDir("bb-world-");
-  const app = await buildApp(loadConfig({ DATA_DIR: dataDir, LOG_LEVEL: "silent", ...env }), db);
+  const app = await buildApp(loadConfig({ DATA_DIR: dataDir, LOG_LEVEL: "silent", ...env }), db, options);
   return { app, db, dataDir };
 }
 

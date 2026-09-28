@@ -67,6 +67,15 @@ const settings: Module = {
     <div class="actions"><button class="button primary" type="submit">Save details</button></div>
   </form>
 </section>
+<section class="panel narrow"><h2>Picture</h2>
+  <form method="post" action="${projectPath(pr)}/cover" enctype="multipart/form-data" class="row">
+    <input type="hidden" name="_csrf" value="${csrf}">
+    <label class="visually-hidden" for="cover">Picture</label>
+    <input id="cover" name="cover" type="file" accept="image/png,image/jpeg,image/webp" required class="grow">
+    <button class="button" type="submit">Upload picture</button>
+  </form>
+  <p class="hint">A square PNG, JPEG or WebP, up to 10 MB. BeatBranch makes its own copy at 512 by 512.</p>
+</section>
 ${owner ? html`<section class="panel narrow"><h2>Remixes</h2>
   <form method="post" action="${projectPath(pr)}/remix" class="row">
     <input type="hidden" name="_csrf" value="${csrf}">

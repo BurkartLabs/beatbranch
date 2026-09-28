@@ -42,6 +42,11 @@ const toCommit = (r: CommitRow): Commit => ({
   authorId: r.author_id, authorHandle: r.author_handle, authorName: r.author_name, message: r.message, parseStatus: r.parse_status, createdAt: Number(r.created_at)
 });
 
+export async function quotaFor(db: Db, userId: string, config: { storageQuotaBytes: number; storageQuotaPlusBytes: number }): Promise<number> {
+  const r = await db.get<{ plan: string }>("SELECT plan FROM users WHERE id = ?", [userId]);
+  return r?.plan === "plus" ? config.storageQuotaPlusBytes : config.storageQuotaBytes;
+}
+
 export async function usedBytes(db: Db, userId: string): Promise<number> {
   const r = await db.get<{ n: number | null }>("SELECT COALESCE(SUM(b.size), 0) AS n FROM account_blobs a JOIN blobs b ON b.hash = a.blob_hash WHERE a.user_id = ?", [userId]);
   return Number(r?.n ?? 0);
