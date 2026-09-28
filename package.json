@@ -1,0 +1,40 @@
+{
+  "name": "beatbranch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub for music producers: commits, branches, honest merges, and a browser view of the DAW project. Product of Orchestrata (AB#2526).",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node scripts/build-version.mjs && tsc -p tsconfig.json",
+    "prestart": "npm run build",
+    "start": "node dist/src/server.js",
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "node scripts/test-strict.mjs",
+    "check": "npm run typecheck && npm test",
+    "look": "npm run build && node scripts/look.mjs"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.13.3",
+    "@azure/storage-blob": "^12.34.0",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/formbody": "^9.0.0",
+    "@fastify/multipart": "^10.1.2",
+    "@fastify/static": "^10.1.4",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

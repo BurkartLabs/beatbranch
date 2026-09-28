@@ -5,3 +5,7 @@ node_modules/
 dist/
 test-results/
 capture/
+data/
+version.json
+.vitest-results*.json
+.embedded-postgres/
