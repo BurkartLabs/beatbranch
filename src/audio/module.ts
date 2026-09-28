@@ -51,7 +51,21 @@ export async function playableOf(db: Db, hash: string): Promise<{ hash: string |
   return r ? { hash: r.playable_hash, reason: r.reason } : null;
 }
 
-export async function makePreview(deps: Deps, commitId: string, zips: string[]): Promise<void> {
+const SHORT_MS = 3000;
+const isShort = (ms: number) => ms > 0 && ms < SHORT_MS;
+
+export async function prepareListening(deps: Deps, commitId: string, files: Pick<CommitFile, "kind" | "name" | "hash" | "contentType">[], local: Map<string, string>): Promise<void> {
+  const audio = files.filter((f) => (f.kind === "stem" || f.kind === "bounce") && f.contentType.startsWith("audio/"));
+  for (const f of audio) await makePeaks(deps, f.hash, local.get(f.hash)!);
+  if (files.some((f) => f.kind === "bounce")) return;
+  const stems = files.filter((f) => f.kind === "stem");
+  const lengths = (await Promise.all(stems.map((f) => peaksOf(deps.db, f.hash)))).flatMap((p) => (p ? [p.durationMs] : []));
+  if (lengths.some((ms) => !isShort(ms))) return;
+  const zips = files.filter((f) => f.kind === "samples" || (f.kind === "project" && f.contentType === "application/zip")).map((f) => local.get(f.hash)!);
+  await makePreview(deps, commitId, zips, stems.map((f) => ({ name: f.name, file: local.get(f.hash)! })));
+}
+
+export async function makePreview(deps: Deps, commitId: string, zips: string[], sounds: { name: string; file: string }[] = []): Promise<void> {
   const raw = await modelOf(deps.db, commitId);
   const m = Model.safeParse(raw);
   if (!m.success) return;
@@ -59,16 +73,19 @@ export async function makePreview(deps: Deps, commitId: string, zips: string[]):
   fs.mkdirSync(dir, { recursive: true });
   try {
     const out = path.join(dir, "preview.wav");
-    const r = await runSandboxed<{ ok: true; seconds: number } | { ok: false; reason: string }>("../audio/worker", { kind: "render", model: m.data, zips, out });
+    const r = await runSandboxed<{ ok: true; seconds: number; standIns: string[]; missing: string[]; contentType: string } | { ok: false; reason: string }>("../audio/worker", { kind: "render", model: m.data, zips, sounds, out }, { memoryMb: 768, seconds: 120 });
     if (!r.ok) {
-      await deps.db.run("INSERT INTO commit_previews (commit_id, blob_hash, reason, created_at) VALUES (?, NULL, ?, ?) ON CONFLICT (commit_id) DO NOTHING", [commitId, r.reason, Date.now()]);
+      await deps.db.run("INSERT INTO commit_previews (commit_id, blob_hash, reason, created_at) VALUES (?, NULL, ?, ?) ON CONFLICT (commit_id) DO UPDATE SET blob_hash = NULL, reason = EXCLUDED.reason", [commitId, r.reason, Date.now()]);
       return;
     }
     const data = fs.readFileSync(out);
     const hash = crypto.createHash("sha256").update(data).digest("hex");
     await storeOf(deps).putFile(hash, out);
     await deps.db.run("INSERT INTO blobs (hash, size, created_at) VALUES (?, ?, ?) ON CONFLICT (hash) DO NOTHING", [hash, data.length, Date.now()]);
-    await deps.db.run("INSERT INTO commit_previews (commit_id, blob_hash, reason, created_at) VALUES (?, ?, '', ?) ON CONFLICT (commit_id) DO NOTHING", [commitId, hash, Date.now()]);
+    await deps.db.run(
+      "INSERT INTO commit_previews (commit_id, blob_hash, reason, content_type, stand_ins, missing, created_at) VALUES (?, ?, '', ?, ?, ?, ?) ON CONFLICT (commit_id) DO UPDATE SET blob_hash = EXCLUDED.blob_hash, reason = '', content_type = EXCLUDED.content_type, stand_ins = EXCLUDED.stand_ins, missing = EXCLUDED.missing",
+      [commitId, hash, r.contentType, JSON.stringify(r.standIns), JSON.stringify(r.missing), Date.now()]
+    );
     await makePeaks(deps, hash, out);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -111,7 +128,7 @@ export function clock(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export async function tracksFor(deps: Deps, a: Access, c: Commit, files: CommitFile[]): Promise<{ tracks: PlayerTrack[]; kind: "stems" | "bounce" | "preview" | "none"; reason: string }> {
+export async function tracksFor(deps: Deps, a: Access, c: Commit, files: CommitFile[]): Promise<{ tracks: PlayerTrack[]; kind: "stems" | "bounce" | "preview" | "none"; reason: string; standIns: string[]; missing: string[] }> {
   const base = `${projectPath(a.project)}/c/${c.id}`;
   const stems = files.filter((f) => f.kind === "stem" && f.contentType.startsWith("audio/"));
   const bounce = files.find((f) => f.kind === "bounce" && f.contentType.startsWith("audio/"));
@@ -130,21 +147,25 @@ export async function tracksFor(deps: Deps, a: Access, c: Commit, files: CommitF
     return out;
   };
   const cant = () => (unplayable.length ? `BeatBranch can't play ${unplayable.join(", ")}: ${unplayable.length === 1 ? "it's" : "they're"} in a format browsers don't understand.` : "");
-  if (stems.length) {
-    const tracks = await build(stems);
-    if (tracks.length) return { tracks, kind: "stems", reason: cant() };
-  }
+  const none = { standIns: [], missing: [] };
+  const stemTracks = stems.length ? await build(stems) : [];
+  if (stemTracks.length && !stemTracks.every((t) => isShort(t.durationMs))) return { tracks: stemTracks, kind: "stems", reason: cant(), ...none };
   if (bounce) {
     const tracks = await build([bounce]);
-    if (tracks.length) return { tracks, kind: "bounce", reason: cant() };
+    if (tracks.length) return { tracks, kind: "bounce", reason: cant(), ...none };
   }
-  if (unplayable.length) return { tracks: [], kind: "none", reason: cant() };
-  const pv = await deps.db.get<{ blob_hash: string | null; reason: string }>("SELECT blob_hash, reason FROM commit_previews WHERE commit_id = ?", [c.id]);
+  const pv = await deps.db.get<{ blob_hash: string | null; reason: string; stand_ins: string; missing: string }>("SELECT blob_hash, reason, stand_ins, missing FROM commit_previews WHERE commit_id = ?", [c.id]);
   if (pv?.blob_hash) {
     const p = await peaksOf(deps.db, pv.blob_hash);
-    return { tracks: [{ name: "Preview mix", src: `${base}/preview?play=1`, peaks: p?.peaks ?? [], durationMs: p?.durationMs ?? 0 }], kind: "preview", reason: "" };
+    return { tracks: [{ name: "The song", src: `${base}/preview?play=1`, peaks: p?.peaks ?? [], durationMs: p?.durationMs ?? 0 }], kind: "preview", reason: "", standIns: JSON.parse(pv.stand_ins) as string[], missing: JSON.parse(pv.missing) as string[] };
   }
-  return { tracks: [], kind: "none", reason: pv?.reason ?? "" };
+  if (stemTracks.length) return { tracks: stemTracks, kind: "stems", reason: cant(), ...none };
+  if (unplayable.length) return { tracks: [], kind: "none", reason: cant(), ...none };
+  return { tracks: [], kind: "none", reason: pv?.reason ?? "", ...none };
+}
+
+function list(names: string[]): string {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 export async function listenPanel(deps: Deps, a: Access, c: Commit, files: CommitFile[], title: string, comments?: Html): Promise<Html> {
@@ -152,8 +173,11 @@ export async function listenPanel(deps: Deps, a: Access, c: Commit, files: Commi
   if (t.kind === "none") {
     return t.reason ? html`<section class="panel"><h2>${title}</h2><p class="muted">${t.reason}</p></section>` : html``;
   }
-  const short = t.kind === "stems" && t.tracks.every((x) => x.durationMs > 0 && x.durationMs < 3000);
-  const note = html`${t.kind === "preview" ? html`<p class="muted">A rough mix BeatBranch made from the project's sounds. Effects aren't included.</p>` : ""}${short ? html`<p class="flash ok">These instrument tracks are only a few seconds long, so they sound like single sounds, not parts of the song. To hear the whole song here, export it from your music program${a.project.daw === "fl-studio" ? " (in FL Studio: File › Export › WAV file; tick “Split mixer tracks” to get one file per instrument)" : ""} and save a new version with those files.</p>` : ""}${t.reason ? html`<p class="muted">${t.reason}</p>` : ""}`;
+  const short = t.kind === "stems" && t.tracks.every((x) => isShort(x.durationMs));
+  const daw = a.project.daw === "fl-studio" ? "FL Studio" : "your music program";
+  const one = t.standIns.length === 1;
+  const preview = html`<p class="muted">BeatBranch played this from the project file${t.standIns.length ? `, so it's a sketch. ${list(t.standIns)} ${one ? "uses a simple stand-in sound" : "use simple stand-in sounds"}, because only ${daw} can play ${one ? "that instrument" : "those instruments"}` : ""}. Effects aren't included. To hear exactly what you hear in ${daw}, add the full song to a save.</p>${t.missing.length ? html`<p class="muted">Missing sound${t.missing.length === 1 ? "" : "s"}: ${list(t.missing)}. Add ${t.missing.length === 1 ? "it" : "them"} to the samples zip to hear ${t.missing.length === 1 ? "it" : "them"}.</p>` : ""}`;
+  const note = html`${t.kind === "preview" ? preview : ""}${short ? html`<p class="flash ok">These instrument tracks are only a few seconds long, so they sound like single sounds, not parts of the song. To hear the whole song here, export it from your music program${a.project.daw === "fl-studio" ? " (in FL Studio: File › Export › WAV file; tick “Split mixer tracks” to get one file per instrument)" : ""} and save a new version with those files.</p>` : ""}${t.reason ? html`<p class="muted">${t.reason}</p>` : ""}`;
   return player(t.tracks, { title, note, ...(comments ? { comments } : {}) });
 }
 
@@ -161,13 +185,7 @@ const audio: Module = {
   name: "audio",
   register(app, deps) {
     const h = hooks(deps);
-    h.lateCommit.push(async (d, _project, commit, files, temps) => {
-      for (const f of files) if ((f.kind === "stem" || f.kind === "bounce") && f.contentType.startsWith("audio/")) await makePeaks(d, f.hash, temps.get(f.hash)!);
-      if (!files.some((f) => f.kind === "stem" || f.kind === "bounce")) {
-        const zips = files.filter((f) => f.kind === "samples" || (f.kind === "project" && f.contentType === "application/zip")).map((f) => temps.get(f.hash)!);
-        await makePreview(d, commit.id, zips);
-      }
-    });
+    h.lateCommit.push(async (d, _project, commit, files, temps) => prepareListening(d, commit.id, files, temps));
     h.commitExtras.unshift(async (d, a, c, files, _audio, req) => listenPanel(d, a, c, files, "Listen to this save", await commentsFor(d, a, c, req)));
     h.branchPanels.unshift(async (d, a, branch) => {
       if (!branch.headCommitId) return html``;
@@ -182,9 +200,9 @@ const audio: Module = {
       if (!a) return reply.callNotFound();
       const c = await getCommit(deps.db, a.project.id, p.id);
       if (!c) return reply.callNotFound();
-      const pv = await deps.db.get<{ blob_hash: string | null }>("SELECT blob_hash FROM commit_previews WHERE commit_id = ?", [c.id]);
+      const pv = await deps.db.get<{ blob_hash: string | null; content_type: string }>("SELECT blob_hash, content_type FROM commit_previews WHERE commit_id = ?", [c.id]);
       if (!pv?.blob_hash) return reply.callNotFound();
-      const url = await storeOf(deps).signedUrl(pv.blob_hash, { filename: `${a.project.slug}-preview.wav`, contentType: "audio/wav", userId: req.user?.id ?? null, ttlSeconds: deps.config.blobUrlTtlSeconds, inline: (req.query as { play?: string }).play === "1" });
+      const url = await storeOf(deps).signedUrl(pv.blob_hash, { filename: `${a.project.slug}-song.${pv.content_type === "audio/mpeg" ? "mp3" : "wav"}`, contentType: pv.content_type, userId: req.user?.id ?? null, ttlSeconds: deps.config.blobUrlTtlSeconds, inline: (req.query as { play?: string }).play === "1" });
       return reply.redirect(url, 303);
     });
   }

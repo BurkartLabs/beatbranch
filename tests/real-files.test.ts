@@ -4,9 +4,11 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { EV, parseFlp, playlistItemSize } from "../src/parsers/flp.js";
+import { decodeWav } from "../src/audio/decode.js";
+import { OUT_RATE, renderPreview } from "../src/audio/render.js";
 import { createProject } from "../src/projects/repo.js";
 import type { PostgresDb } from "../src/db/db.js";
-import { get, person, postMultipart, wav, world, type Person } from "./helpers.js";
+import { flp, get, person, postMultipart, wav, world, type Person } from "./helpers.js";
 import { FlpWriter } from "./fixtures.js";
 import { tempDir } from "./temp-dir.js";
 
@@ -140,8 +142,8 @@ describe("playing real-world audio (Bug AB#4759)", () => {
     expect(page).toContain(">Clap</a>");
   });
 
-  it("explains, in plain words, when every instrument track is just a short sound", async () => {
-    const r = await postMultipart(app, "/p/@alice/old/commit", alice, [{ name: "message", value: "one shots" }, { name: "project", filename: "o.flp", data: fl9() }, { name: "stems", filename: "hat.wav", data: wav("hat", 2000) }]);
+  it("explains, in plain words, when every instrument track is just a short sound and the song can't be played from the project", async () => {
+    const r = await postMultipart(app, "/p/@alice/old/commit", alice, [{ name: "message", value: "one shots" }, { name: "project", filename: "o.flp", data: flp("x") }, { name: "stems", filename: "hat.wav", data: wav("hat", 2000) }]);
     const page = (await get(app, String(r.headers.location), alice)).body;
     expect(page).toContain("only a few seconds long");
     expect(page).toContain("Split mixer tracks");
@@ -157,5 +159,44 @@ describe("playing real-world audio (Bug AB#4759)", () => {
     const css = fs.readFileSync(path.join(process.cwd(), "src", "web", "static", "projects.css"), "utf8");
     expect(css).toMatch(/\.lanes \{[^}]*grid-template-columns: minmax\(8rem, 12rem\) minmax\(0, 1fr\)/);
     expect(css).toContain(".target:target");
+  });
+});
+
+describe("hearing an FL Studio save without exporting anything (Bug AB#4763)", () => {
+  const click = () => ({ rate: OUT_RATE, channels: [Float32Array.from({ length: 400 }, (_, i) => (i < 200 ? 0.8 : 0))] });
+
+  it("plays each instrument's own sample on its notes, and a stand-in voice for a synth", () => {
+    const m = parseFlp(fl9());
+    const r = renderPreview(m, new Map([["clap.wav", click()]]));
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.standIns).toEqual(["Rhodes"]);
+    expect(r.missing).toEqual([]);
+    const out = decodeWav(r.wav).channels[0]!;
+    const at = (s: number) => Math.floor(s * OUT_RATE);
+    const spb = 60 / 160;
+    const loud = (a: number, b: number) => out.subarray(at(a), at(b)).reduce((mx, v) => Math.max(mx, Math.abs(v)), 0);
+    expect(loud(0, spb)).toBeGreaterThan(0.01);
+    expect(loud(1.5, 5 * spb - 0.005)).toBe(0);
+    expect(loud(5 * spb, 5 * spb + 0.004)).toBeGreaterThan(0.05);
+  });
+
+  it("names a missing sound instead of refusing the whole song", () => {
+    const r = renderPreview(parseFlp(fl9()), new Map());
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.missing).toEqual(["clap.wav"]);
+    expect(r.standIns).toEqual(["Rhodes"]);
+  });
+
+  it("makes the song the thing you hear when the uploaded audio is only the project's short samples", async () => {
+    const { app, db } = await world();
+    const bob = await person(db, "bob");
+    await createProject(db, bob.id, { name: "Sketch", visibility: "public", daw: "fl-studio" });
+    const r = await postMultipart(app, "/p/@bob/sketch/commit", bob, [{ name: "message", value: "just the flp" }, { name: "project", filename: "s.flp", data: fl9() }, { name: "stems", filename: "clap.wav", data: wav("clap", 2000) }]);
+    const page = (await get(app, String(r.headers.location), bob)).body;
+    expect((page.match(/class="stem"/g) ?? []).length).toBe(1);
+    expect(page).toContain("The song");
+    expect(page).toContain("Rhodes uses a simple stand-in sound, because only FL Studio can play that instrument");
+    expect(page).not.toContain("only a few seconds long");
+    await app.close();
   });
 });

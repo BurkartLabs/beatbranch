@@ -59,13 +59,13 @@ export function ffmpegPath(): string {
   return process.env.FFMPEG_PATH || "ffmpeg";
 }
 
-export function decodeWithFfmpeg(file: string, seconds = 60, maxSeconds = 1800): Promise<Pcm> {
+export function decodeWithFfmpeg(file: string, seconds = 60, maxSeconds = 1800, rate = RATE): Promise<Pcm> {
   return new Promise((resolve, reject) => {
-    const args = ["-hide_banner", "-loglevel", "error", "-nostdin", "-t", String(maxSeconds), "-i", file, "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "pipe:1"];
+    const args = ["-hide_banner", "-loglevel", "error", "-nostdin", "-t", String(maxSeconds), "-i", file, "-vn", "-ac", "1", "-ar", String(rate), "-f", "f32le", "pipe:1"];
     const p = spawn(ffmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const chunks: Buffer[] = [];
     let total = 0;
-    const cap = maxSeconds * RATE * 4 + 1024;
+    const cap = maxSeconds * rate * 4 + 1024;
     const timer = setTimeout(() => p.kill("SIGKILL"), seconds * 1000);
     p.stdout.on("data", (c: Buffer) => {
       total += c.length;
@@ -82,7 +82,7 @@ export function decodeWithFfmpeg(file: string, seconds = 60, maxSeconds = 1800):
       if (code !== 0 || total === 0) return reject(new DecodeError("the audio file couldn't be decoded"));
       const buf = Buffer.concat(chunks);
       const f = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 4));
-      resolve({ rate: RATE, channels: [Float32Array.from(f)] });
+      resolve({ rate, channels: [Float32Array.from(f)] });
     });
   });
 }

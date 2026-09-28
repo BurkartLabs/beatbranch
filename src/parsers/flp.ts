@@ -266,7 +266,7 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
 
   const patterns: Pattern[] = [];
   for (const [index, p] of [...pats.entries()].sort((a, b) => a[0] - b[0])) {
-    const notes: Note[] = p.notes.map((n) => ({ start: beats(n.pos), length: beats(n.len), key: Math.min(127, n.key), velocity: Math.min(1, n.vel / 128) }));
+    const notes: Note[] = p.notes.map((n) => ({ start: beats(n.pos), length: beats(n.len), key: Math.min(127, n.key), velocity: Math.min(1, n.vel / 128), track: `ch${n.channel}` }));
     const lengthBeats = notes.reduce((mx, n) => Math.max(mx, n.start + n.length), 0);
     patterns.push({ id: String(index), name: p.name || `Pattern ${index}`, lengthBeats: Math.ceil(lengthBeats / 4) * 4, notes });
   }
@@ -294,6 +294,7 @@ export function parseFlp(buf: Uint8Array, bundled: Set<string> = new Set()): Mod
       plugins,
       mixer: c.insert,
       sends: ins ? ins.sends.map((s) => m.mixer.find((x) => x.index === s)?.name ?? `Insert ${s}`) : [],
+      sample: c.sample,
       clips: []
     };
   });

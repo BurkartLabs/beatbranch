@@ -3,7 +3,7 @@ import { z } from "zod";
 export const FORMATS = ["flp", "als", "rpp", "song", "bwproject", "logic"] as const;
 export type ModelFormat = (typeof FORMATS)[number];
 
-export const Note = z.object({ start: z.number().min(0), length: z.number().min(0), key: z.number().int().min(0).max(127), velocity: z.number().min(0).max(1) });
+export const Note = z.object({ start: z.number().min(0), length: z.number().min(0), key: z.number().int().min(0).max(127), velocity: z.number().min(0).max(1), track: z.string().optional() });
 export const Pattern = z.object({ id: z.string(), name: z.string(), lengthBeats: z.number().min(0), notes: z.array(Note) });
 export const Clip = z.object({
   start: z.number().min(0),
@@ -21,6 +21,7 @@ export const Track = z.object({
   plugins: z.array(z.string()),
   mixer: z.number().int().nullable(),
   sends: z.array(z.string()),
+  sample: z.string().nullable().optional(),
   clips: z.array(Clip)
 });
 export const MixerChannel = z.object({ index: z.number().int(), name: z.string(), plugins: z.array(z.string()), sends: z.array(z.number().int()) });
