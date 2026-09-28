@@ -19,18 +19,20 @@ A rewritten handoff, not a diary: what is true now, what is in flight, what the 
 - **Accounts (AB#2716)**: `/register` (open, the Board's answer; `SIGNUP=closed` turns it off), `/login`, `/logout`;
   scrypt hashes, decoy hash for unknown emails, sign-in failures limited per address and per account, registrations
   per address; the first account is the admin. No password reset yet (owed, not in any S1 item).
+- **Projects (AB#2747, AB#2913)**: /new, /p/@handle/slug, /explore, /@handle. One transaction makes the project, its
+  owner membership, its `main` branch and its tags. `repo.access()` is the only way a project is read: private or
+  hidden is a 404 for a non-member. Cover art moved to AB#2881.
 
 ## In flight
 
-Nothing. AB#2716 ends with its pull request.
+Nothing. AB#2747 and AB#2913 end with their pull request.
 
 ## Next, in order (one branch and one PR each, from the S1 backlog)
 
-1. AB#2913 default `main` branch on project creation, with AB#2747 create a project.
-3. AB#2769 project page header; AB#2949 commit list; AB#2965 branch selector.
-4. AB#2805 commit upload, AB#2817 content addressing, AB#2834 quota (the blob store: disk now, Azure AB#3821).
-5. AB#2780 visibility enforcement; AB#3765 the two-account probe; AB#2920/2933 branches; AB#2736 profile; AB#3748 report.
-6. hq: `ops/infra/beatbranch/` bicep + runbook (AB#3797/3821), deployed by the Board.
+1. AB#2769 project page header; AB#2949 commit list; AB#2965 branch selector (the page exists: /p/@handle/slug).
+2. AB#2805 commit upload, AB#2817 content addressing, AB#2834 quota (the blob store: disk now, Azure AB#3821).
+3. AB#2780 visibility enforcement; AB#3765 the two-account probe; AB#2920/2933 branches; AB#2736 profile; AB#3748 report.
+4. hq: `ops/infra/beatbranch/` bicep + runbook (AB#3797/3821), deployed by the Board.
 
 ## Blocked / owed
 
