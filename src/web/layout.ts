@@ -40,7 +40,7 @@ export function initialsOf(displayName: string): string {
   return letters.toLocaleUpperCase() || "?";
 }
 
-const asset = (s: string, ext: "css" | "js") => new RegExp(`^/static/[a-z0-9-]+\\.${ext}$`).test(s);
+const asset = (s: string, ext: "css" | "js" | "mjs") => new RegExp(`^/static/[a-z0-9-]+\\.${ext}$`).test(s);
 
 export function page(options: PageOptions, body: Html): Html {
   const { title, user, nav = [], current, flash, styles = [], scripts = [] } = options;
@@ -86,6 +86,7 @@ ${styles.filter((s) => asset(s, "css")).map((s) => html`<link rel="stylesheet" h
   ${body}
 </main>
 ${scripts.filter((s) => asset(s, "js")).map((s) => html`<script src="${s}" defer></script>`)}
+${scripts.filter((s) => asset(s, "mjs")).map((s) => html`<script type="module" src="${s}"></script>`)}
 </body>
 </html>`;
 }

@@ -60,8 +60,8 @@ export async function createUser(db: Db, input: z.infer<typeof NewUser>, now = D
     if (await db.get("SELECT 1 AS found FROM users WHERE handle = ?", [user.handle])) return { ok: false, reason: "handle-taken" } as const;
     const first = !(await db.get("SELECT 1 AS found FROM users LIMIT 1"));
     const role = first ? "admin" : "producer";
-    await db.run("INSERT INTO users (id, email, handle, display_name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
-      id, user.email, user.handle, user.displayName, passwordHash, role, now
+    await db.run("INSERT INTO users (id, email, handle, display_name, password_hash, role, created_at, verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+      id, user.email, user.handle, user.displayName, passwordHash, role, now, first ? now : null
     ]);
     return { ok: true, user: { id, email: user.email, handle: user.handle, displayName: user.displayName, role } } as const;
   });

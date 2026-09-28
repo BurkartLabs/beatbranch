@@ -13,7 +13,7 @@ export async function recountAccount(db: Db, userId: string): Promise<void> {
 export async function collectGarbage(db: Db, store: BlobStore): Promise<number> {
   const orphans = await db.all<{ hash: string }>(
     `SELECT b.hash FROM blobs b WHERE NOT EXISTS (SELECT 1 FROM commit_files f WHERE f.blob_hash = b.hash)
-     AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.cover_blob = b.hash)`
+     AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.cover_blob = b.hash) AND NOT EXISTS (SELECT 1 FROM commit_previews v WHERE v.blob_hash = b.hash)`
   );
   for (const { hash } of orphans) {
     await db.transaction(async () => {

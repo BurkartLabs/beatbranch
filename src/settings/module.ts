@@ -37,6 +37,7 @@ const settings: Module = {
       const tags = (await tagsOf(deps.db, pr.id)).join(", ");
       const csrf = req.session!.csrfToken;
       const owner = a.role === "owner";
+      const remix = !!(await deps.db.get<{ open_for_remix: boolean }>("SELECT open_for_remix FROM projects WHERE id = ?", [pr.id]))?.open_for_remix;
       const sel = (cur: string, id: string) => (cur === id ? html` selected` : "");
       return render(
         req,
@@ -66,6 +67,14 @@ const settings: Module = {
     <div class="actions"><button class="button primary" type="submit">Save details</button></div>
   </form>
 </section>
+${owner ? html`<section class="panel narrow"><h2>Remixes</h2>
+  <form method="post" action="${projectPath(pr)}/remix" class="row">
+    <input type="hidden" name="_csrf" value="${csrf}">
+    <input type="hidden" name="open" value="${remix ? "0" : "1"}">
+    <p class="grow">${remix ? "This song is open for remixes: it's listed on Explore under “Open for remix”." : "Let other producers know they're welcome to make their own copy and remix it."}</p>
+    <button class="button" type="submit">${remix ? "Close for remixes" : "Open for remixes"}</button>
+  </form>
+</section>` : ""}
 ${owner ? html`<section class="panel narrow danger-zone">
   <h2>Delete this song</h2>
   <p class="muted">Deletes every save, idea and file in it. This can't be undone.</p>

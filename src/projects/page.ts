@@ -9,6 +9,9 @@ import { ideaName, plural } from "../web/words.js";
 import { dawName, stateName } from "./catalogue.js";
 import { branchesOf, tagsOf, type Access, type Branch } from "./repo.js";
 import { dayOf, projectPath, visibilityBadge } from "./views.js";
+import { forkInfo, latestRelease } from "../social/repo.js";
+import { getCommit, filesOf } from "../commits/repo.js";
+import { listenPanel } from "../audio/module.js";
 
 
 async function branchBody(deps: Deps, a: Access, branch: Branch, req: FastifyRequest): Promise<Html> {
@@ -40,16 +43,25 @@ export async function projectPage(req: FastifyRequest, reply: FastifyReply, deps
   if (project.musicalKey) facts.push(html`<span>${project.musicalKey}</span>`);
   if (project.genre) facts.push(html`<span>${project.subgenre ? `${project.genre} · ${project.subgenre}` : project.genre}</span>`);
   const base = projectPath(project);
+  const forks = await forkInfo(deps.db, project.id);
+  const release = await latestRelease(deps.db, project.id);
+  let releasePanel: Html = html``;
+  if (release) {
+    const rc = await getCommit(deps.db, project.id, release.commitId);
+    if (rc) releasePanel = await listenPanel(deps, a, rc, (await filesOf(deps.db, rc.id)).filter((f) => f.kind === "bounce"), `Latest release: ${release.name}`);
+  }
+  const signedIn = !!req.user;
+  const csrf = req.session?.csrfToken ?? "";
   return render(
     req,
     reply,
     deps,
-    { title: project.name, styles: ["/static/projects.css", "/static/player.css", "/static/view.css"], scripts: ["/static/branch.js", "/static/player.js", "/static/view.js"] },
+    { title: project.name, styles: ["/static/projects.css", "/static/player.css", "/static/view.css"], scripts: ["/static/branch.js", "/static/player.mjs", "/static/view.js"] },
     html`<section class="project-header">
   <div>
     <p class="muted crumbs"><a href="/@${project.ownerHandle}">${project.ownerName}</a> / ${project.name}</p>
     <h1>${project.name} ${visibilityBadge(project)}</h1>
-    <p class="artist">by <a href="/@${project.ownerHandle}">${project.ownerName}</a></p>
+    <p class="artist">by <a href="/@${project.ownerHandle}">${project.ownerName}</a>${forks.source ? html` · a copy of ${forks.source.visible ? html`<a href="/p/@${forks.source.handle}/${forks.source.slug}">${forks.source.name}</a> by @${forks.source.handle}` : "a song that is no longer public"}` : ""}</p>
     <p class="meta">${facts}<span>started ${dayOf(project.createdAt)}</span></p>
     ${project.hiddenAt !== null ? html`<p class="flash error">This project is hidden from everyone but its members${project.hiddenReason ? html`: ${project.hiddenReason}` : ""}.</p>` : ""}
   </div>
@@ -61,10 +73,15 @@ export async function projectPage(req: FastifyRequest, reply: FastifyReply, deps
     </form>
     <a class="button" href="${base}/branches">Ideas</a>
     <a class="button" href="${base}/compare">What changed</a>
+    ${a.role !== null ? html`<a class="button" href="${base}/people">People</a>` : ""}
     ${canEdit ? html`<a class="button" href="${base}/settings">Settings</a>` : ""}
+    ${signedIn && project.visibility === "public" && req.user!.id !== project.ownerId ? html`<form method="post" action="${base}/fork"><input type="hidden" name="_csrf" value="${csrf}"><button class="button" type="submit" title="Make your own copy of this song to change however you like">Make my own copy</button></form>` : ""}
   </div>
 </section>
+${releasePanel}
 <div id="branch-body" aria-live="polite">${body}</div>
-${project.description || tags.length ? html`<section class="panel"><h2>About</h2>${project.description ? html`<p class="description">${project.description}</p>` : ""}${tags.length ? html`<p class="tags">${tags.map((t) => html`<span class="tag">${t}</span>`)}</p>` : ""}</section>` : ""}`
+${project.description || tags.length ? html`<section class="panel"><h2>About</h2>${project.description ? html`<p class="description">${project.description}</p>` : ""}${tags.length ? html`<p class="tags">${tags.map((t) => html`<span class="tag">${t}</span>`)}</p>` : ""}</section>` : ""}
+${forks.forks.length ? html`<section class="panel"><h2>Copies other people made</h2><ul class="tags">${forks.forks.map((f) => html`<li class="tag"><a href="/p/@${f.handle}/${f.slug}">${f.name} by @${f.handle}</a></li>`)}</ul></section>` : ""}
+${signedIn && project.visibility !== "private" && req.user!.id !== project.ownerId ? html`<details class="report"><summary>Report this song</summary><form method="post" action="${base}/report"><input type="hidden" name="_csrf" value="${csrf}"><label for="report-reason">What's wrong?</label><textarea id="report-reason" name="reason" required maxlength="1000"></textarea><div class="actions"><button class="button danger" type="submit">Send report</button></div></form></details>` : ""}`
   );
 }

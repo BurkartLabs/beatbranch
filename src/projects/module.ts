@@ -7,7 +7,7 @@ import { getProfileByHandle } from "../auth/users.js";
 import { RATE_LIMITS, retryAfterSeconds, retryWords, takeLimit } from "../limits/limits.js";
 import { errorId, html, type Html } from "../web/html.js";
 import { DAWS, GENRE_NAMES, GENRES, STATES, VISIBILITIES } from "./catalogue.js";
-import { access, createProject, listPublic, listPublicOf, NewProject, type NewProjectInput } from "./repo.js";
+import { access, createProject, listPublicOf, NewProject, type NewProjectInput } from "./repo.js";
 import { projectPage } from "./page.js";
 import { dayOf, projectGrid } from "./views.js";
 
@@ -101,16 +101,17 @@ const projects: Module = {
       return projectPage(req, reply, deps, found);
     });
 
-    app.get("/explore", { config: { public: true } }, async (req, reply) => {
-      const list = await listPublic(deps.db);
-      return render(req, reply, deps, { title: "Explore", current: "/explore", styles: ["/static/projects.css"] }, html`<h1>Explore</h1><p class="muted">Public projects, most recently changed first.</p>${projectGrid(list, html`Nothing public yet.`)}`);
-    });
-
     app.get("/@:handle", { config: { public: true } }, async (req, reply) => {
       const { handle } = z.object({ handle: z.string().max(30) }).parse(req.params);
       const profile = await getProfileByHandle(deps.db, handle);
       if (!profile) return reply.callNotFound();
       const list = await listPublicOf(deps.db, profile.id);
+      const released = await deps.db.all<{ project_id: string; name: string; created_at: number }>(
+        "SELECT DISTINCT ON (r.project_id) r.project_id, r.name, r.created_at FROM releases r JOIN projects p ON p.id = r.project_id WHERE p.owner_id = ? AND p.visibility = 'public' AND p.hidden_at IS NULL ORDER BY r.project_id, r.created_at DESC",
+        [profile.id]
+      );
+      const releasedIds = new Map(released.map((r) => [r.project_id, r.name]));
+      const releases = list.filter((p) => releasedIds.has(p.id));
       const mine = req.user?.id === profile.id;
       return render(
         req,
@@ -118,7 +119,8 @@ const projects: Module = {
         deps,
         { title: profile.displayName, styles: ["/static/projects.css"] },
         html`<section class="producer-header"><h1>${profile.displayName}</h1><p class="muted">@${profile.handle} · here since ${dayOf(profile.createdAt)}</p>${profile.bio ? html`<p>${profile.bio}</p>` : ""}</section>
-<h2>Public projects</h2>${projectGrid(list, mine ? html`None public yet. Your private and unlisted projects are on <a href="/">your projects</a>.` : html`Nothing public yet.`, { showArtist: false })}`
+${releases.length ? html`<h2>Releases</h2><ul class="tags">${releases.map((p) => html`<li class="tag"><a href="/p/@${p.ownerHandle}/${p.slug}">${p.name}: ${releasedIds.get(p.id)}</a></li>`)}</ul>` : ""}
+<h2>Public songs</h2>${projectGrid(list, mine ? html`None public yet. Your private and unlisted projects are on <a href="/">your projects</a>.` : html`Nothing public yet.`, { showArtist: false })}`
       );
     });
   }
