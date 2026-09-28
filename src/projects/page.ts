@@ -3,6 +3,8 @@ import { render, type Deps } from "../app.js";
 import { history } from "../commits/repo.js";
 import { commitList } from "../commits/views.js";
 import { html, type Html } from "../web/html.js";
+import { divergence } from "../branches/repo.js";
+import { ideaName, plural } from "../web/words.js";
 import { dawName, stateName } from "./catalogue.js";
 import { branchesOf, tagsOf, type Access, type Branch } from "./repo.js";
 import { dayOf, projectPath, visibilityBadge } from "./views.js";
@@ -17,8 +19,15 @@ async function branchBody(deps: Deps, a: Access, branch: Branch, req: FastifyReq
   const list = await history(deps.db, branch.headCommitId);
   const extra: Html[] = [];
   for (const p of panels) extra.push(await p(deps, a, branch, req));
+  let note: Html = html``;
+  if (branch.name !== "main") {
+    const main = (await branchesOf(deps.db, a.project.id)).find((b) => b.name === "main");
+    const d = await divergence(deps.db, branch.headCommitId, main?.headCommitId ?? null);
+    note = html`<p class="divergence muted">This is an idea: a copy where you can try things without touching the Main version. ${d.ahead ? `It has ${plural(d.ahead, "save")} the Main version doesn't have.` : "Nothing new in it yet."}${d.behind ? ` The Main version has ${plural(d.behind, "newer save")} since it started.` : ""}${d.ahead && a.canEdit ? html` <a href="${projectPath(a.project)}/merge?from=${encodeURIComponent(branch.name)}">Use this idea in the Main version</a>` : ""}</p>`;
+  }
   return html`${extra}<section class="panel">
-  <div class="row space"><h2>Commits on <code>${branch.name}</code></h2>${a.canEdit ? html`<a class="button primary" href="${projectPath(a.project)}/commit?branch=${encodeURIComponent(branch.name)}">Commit</a>` : ""}</div>
+  <div class="row space"><h2>Saves in ${ideaName(branch.name)}</h2>${a.canEdit ? html`<a class="button primary" href="${projectPath(a.project)}/commit?branch=${encodeURIComponent(branch.name)}">Save a new version</a>` : ""}</div>
+  ${note}
   ${commitList(a, list, branch.name)}
 </section>`;
 }
@@ -50,12 +59,12 @@ export async function projectPage(req: FastifyRequest, reply: FastifyReply, deps
   </div>
   <div class="project-actions">
     <form method="get" action="${base}" class="branch-form" data-partial="${base}">
-      <label class="visually-hidden" for="branch">Branch</label>
-      <select id="branch" name="branch" class="branch-select">${branches.map((b) => html`<option value="${b.name}"${b.id === branch.id ? html` selected` : ""}>${b.name}</option>`)}</select>
+      <label class="visually-hidden" for="branch">Which version</label>
+      <select id="branch" name="branch" class="branch-select">${branches.map((b) => html`<option value="${b.name}"${b.id === branch.id ? html` selected` : ""}>${ideaName(b.name)}</option>`)}</select>
       <noscript><button class="button" type="submit">Show</button></noscript>
     </form>
-    <a class="button" href="${base}/branches">Branches</a>
-    <a class="button" href="${base}/compare">Compare</a>
+    <a class="button" href="${base}/branches">Ideas</a>
+    <a class="button" href="${base}/compare">What changed</a>
     ${canEdit ? html`<a class="button" href="${base}/settings">Settings</a>` : ""}
   </div>
 </section>

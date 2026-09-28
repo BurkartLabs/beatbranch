@@ -90,7 +90,7 @@ describe("commit upload (AB#2805, AB#2817, AB#2834)", () => {
     expect(wrongKind.statusCode).toBe(400);
     const noMessage = await postMultipart(app, `${url}/commit`, alice, [{ name: "message", value: "  " }, { name: "project", filename: "n.flp", data: flp("m") }]);
     expect(noMessage.statusCode).toBe(400);
-    expect(noMessage.body).toContain("Write a commit message");
+    expect(noMessage.body).toContain("Say what you changed");
     const noProject = await postMultipart(app, `${url}/commit`, alice, [{ name: "message", value: "stems only" }, { name: "stems", filename: "a.wav", data: wav("a") }]);
     expect(noProject.statusCode).toBe(400);
   });
