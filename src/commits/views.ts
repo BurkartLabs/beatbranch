@@ -1,3 +1,4 @@
+import type { FastifyRequest } from "fastify";
 import type { Deps } from "../app.js";
 import type { Access } from "../projects/repo.js";
 import { dayOf, projectPath } from "../projects/views.js";
@@ -29,7 +30,8 @@ export function commitList(a: Access, list: Commit[], branch: string): Html {
   return html`<ol class="commits">${list.map((c) => commitRow(a, c))}</ol>`;
 }
 
-export async function commitView(deps: Deps, a: Access, c: Commit, files: CommitFile[], csrf?: string): Promise<Html> {
+export async function commitView(deps: Deps, a: Access, c: Commit, files: CommitFile[], req: FastifyRequest): Promise<Html> {
+  const csrf = req.session?.csrfToken;
   const base = `${projectPath(a.project)}/c/${c.id}`;
   const audio = files.filter((f) => f.contentType.startsWith("audio/") && (f.kind === "stem" || f.kind === "bounce"));
   const { commitExtras } = await import("./extras.js");
@@ -40,7 +42,7 @@ export async function commitView(deps: Deps, a: Access, c: Commit, files: Commit
   <p class="muted">${c.authorHandle ? html`<a href="/@${c.authorHandle}">${c.authorName}</a>` : "someone"} saved this on ${dayOf(c.createdAt)}${c.parentId ? html` · <a href="${projectPath(a.project)}/c/${c.parentId}">the save before</a> · <a href="${projectPath(a.project)}/compare?a=${c.parentId}&b=${c.id}">what changed</a>` : ""}${c.parent2Id ? html` · <a href="${projectPath(a.project)}/c/${c.parent2Id}">the idea brought in</a>` : ""}</p>
   ${a.canEdit && csrf ? html`<form method="post" action="${projectPath(a.project)}/branches" class="row start-idea"><input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="commit" value="${c.id}"><label class="visually-hidden" for="idea-here">New idea name</label><input id="idea-here" name="name" type="text" maxlength="40" required placeholder="new idea name" class="grow"><button class="button" type="submit">Start an idea from this save</button></form>` : ""}
 </section>
-${await commitExtras(deps, a, c, files, audio)}
+${await commitExtras(deps, a, c, files, audio, req)}
 <section class="panel">
   <h2>Files</h2>
   <ul class="files">${files.map((f) => html`<li><span class="file-kind">${KIND_LABEL[f.kind]}</span><span class="file-name">${f.name}</span><span class="muted">${size(f.size)}</span><a class="button" href="${base}/f/${String(f.position)}">Download</a></li>`)}</ul>

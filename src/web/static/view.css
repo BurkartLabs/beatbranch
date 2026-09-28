@@ -1,3 +1,29 @@
 .artist { margin: 0 0 0.35rem; }
 .artist a { color: var(--text); }
 .bpm { font-weight: 700; color: var(--text); }
+.model-facts { margin-bottom: 0.75rem; }
+.lanes { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 70vh; overflow-y: auto; }
+.lane { display: contents; }
+.lane-name { display: flex; align-items: center; gap: 0.5rem; padding: 0 0.6rem; height: 36px; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface); position: sticky; left: 0; }
+.lane-name:hover { background: var(--surface-2); }
+.lane-track { height: 36px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; background: var(--surface-2); }
+.lane-svg { display: block; margin-top: 2px; }
+.bar-line { stroke: var(--line); stroke-width: 1; }
+.clip-label { fill: #111; font-size: 11px; font-family: var(--font); pointer-events: none; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.swatch-0 { background: #ff6a3d; } .swatch-1 { background: #3fa7ff; } .swatch-2 { background: #56d364; } .swatch-3 { background: #d2a8ff; } .swatch-4 { background: #f2cc60; }
+.swatch-5 { background: #ff7b9c; } .swatch-6 { background: #39c5bb; } .swatch-7 { background: #a5a5ff; } .swatch-8 { background: #ffa657; } .swatch-9 { background: #7ee787; }
+.target { display: none; margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.target:target { display: block; }
+.chain { margin: 0.25rem 0 0.75rem 1.25rem; padding: 0; }
+.pr-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); margin-bottom: 0.75rem; }
+.pr-svg { display: block; }
+.pr-black { fill: var(--surface-2); }
+.pr-bar { stroke: var(--muted); stroke-opacity: 0.5; }
+.pr-beat { stroke: var(--line); }
+.pr-label { fill: var(--muted); font-size: 9px; font-family: var(--font); }
+.samples { list-style: none; margin: 0; padding: 0; columns: 2 18rem; }
+.samples li { padding: 0.2rem 0; break-inside: avoid; }
+.badge-ok { background: var(--ok-soft); color: var(--ok); }
+.badge-missing { background: var(--error-soft); color: var(--error); }
+@media (max-width: 600px) { .lanes { grid-template-columns: 7rem 1fr; } }

@@ -189,7 +189,7 @@ const commits: Module = {
       if (!a) return reply.callNotFound();
       const commit = await getCommit(deps.db, a.project.id, params.id);
       if (!commit) return reply.callNotFound();
-      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.js"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id), req.session?.csrfToken));
+      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.js"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id), req));
     });
 
     app.get("/p/@:handle/:slug/c/:id/f/:pos", { config: { public: true } }, async (req, reply) => {
