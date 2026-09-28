@@ -1,6 +1,7 @@
-// The front door: signed out, what BeatBranch is and how to start; signed in, the producer's own projects (the list
-// itself arrives with the projects module, AB#2747, which replaces the empty state below).
+// The front door: signed out, what BeatBranch is and how to start; signed in, the producer's own projects.
 import { render, type Module } from "../app.js";
+import { listMine } from "../projects/repo.js";
+import { projectGrid } from "../projects/views.js";
 import { html } from "../web/html.js";
 
 const home: Module = {
@@ -20,7 +21,15 @@ const home: Module = {
 </section>`
         );
       }
-      return render(req, reply, deps, { title: "Your projects", current: "/" }, html`<section class="panel"><h1>Your projects</h1><p class="empty">No projects yet. <a href="/new">Create your first project</a> and upload the DAW file.</p></section>`);
+      const mine = await listMine(deps.db, req.user.id);
+      return render(
+        req,
+        reply,
+        deps,
+        { title: "Your projects", current: "/", styles: ["/static/projects.css"] },
+        html`<h1>Your projects</h1>
+${projectGrid(mine, html`No projects yet. <a href="/new">Create your first project</a> and upload the DAW file.`, { showArtist: false })}`
+      );
     });
   }
 };
