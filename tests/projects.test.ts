@@ -78,8 +78,8 @@ describe("create a project (AB#2747, AB#2913)", () => {
     expect(page.body).toContain("Night Drive");
     expect(page.body).toContain("124 BPM");
     expect(page.body).toContain("FL Studio");
-    expect(page.body).toContain("No commits yet");
-    expect(page.body).toContain('<option value="main" selected>');
+    expect(page.body).toContain("Nothing saved here yet");
+    expect(page.body).toContain(">Main version</option>");
   });
 
   it("refuses a missing name, an unknown DAW, a bad visibility and a genre pair off the list, naming the field", async () => {

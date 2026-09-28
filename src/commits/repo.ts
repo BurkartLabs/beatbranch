@@ -68,7 +68,7 @@ export async function createCommit(
   const now = input.now ?? Date.now();
   const id = crypto.randomUUID();
   return db.transaction(async () => {
-    const branch = await db.get<{ id: string; head_commit_id: string | null }>("SELECT id, head_commit_id FROM branches WHERE project_id = ? AND name = ? FOR UPDATE", [input.projectId, input.branchName]);
+    const branch = await db.get<{ id: string; head_commit_id: string | null }>("SELECT id, head_commit_id FROM branches WHERE project_id = ? AND name = ? AND deleted_at IS NULL FOR UPDATE", [input.projectId, input.branchName]);
     if (!branch) throw new Error("no such branch");
     if (input.expectedHead !== undefined && branch.head_commit_id !== input.expectedHead) throw new BranchMoved();
     for (const f of input.files) {

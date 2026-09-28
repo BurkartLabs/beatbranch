@@ -27,3 +27,6 @@
 /* The radio in its own column, so a description that wraps stays beside it, not under it. */
 .choice { display: grid; grid-template-columns: auto 1fr; column-gap: 0.5rem; align-items: baseline; font-weight: 400; margin: 0.35rem 0 0; }
 @media (max-width: 560px) { .two { grid-template-columns: 1fr; } }
+.danger-zone { border-color: var(--error-soft); }
+.danger-zone h2 { color: var(--error); }
+.start-idea { margin-top: 0.75rem; }

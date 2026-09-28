@@ -169,7 +169,7 @@ export interface Branch {
 
 export async function branchesOf(db: Db, projectId: string): Promise<Branch[]> {
   const rows = await db.all<{ id: string; name: string; head_commit_id: string | null; created_at: number }>(
-    "SELECT id, name, head_commit_id, created_at FROM branches WHERE project_id = ? ORDER BY CASE WHEN name = 'main' THEN 0 ELSE 1 END, name",
+    "SELECT id, name, head_commit_id, created_at FROM branches WHERE project_id = ? AND deleted_at IS NULL ORDER BY CASE WHEN name = 'main' THEN 0 ELSE 1 END, name",
     [projectId]
   );
   return rows.map((r) => ({ id: r.id, name: r.name, headCommitId: r.head_commit_id, createdAt: Number(r.created_at) }));

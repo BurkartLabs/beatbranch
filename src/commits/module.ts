@@ -12,6 +12,7 @@ import { RATE_LIMITS, retryAfterSeconds, retryWords, takeLimit } from "../limits
 import { access, branchesOf, type Access } from "../projects/repo.js";
 import { projectPath } from "../projects/views.js";
 import { html, type Html } from "../web/html.js";
+import { ideaName, KIND_WORDS } from "../web/words.js";
 import { afterCommit } from "./after.js";
 import { cleanName, judge, MAX_FILE_BYTES, MAX_STEMS, type FileKind } from "./files.js";
 import { createCommit, filesOf, getCommit, newBytesFor, usedBytes, type StagedFile } from "./repo.js";
@@ -33,25 +34,27 @@ function commitForm(a: Access, branches: string[], branch: string, csrf: string,
   const accept = p.daw === "fl-studio" ? ".flp,.zip" : p.daw === "ableton" ? ".als,.zip" : p.daw === "reaper" ? ".rpp,.zip" : p.daw === "studio-one" ? ".song,.zip" : p.daw === "bitwig" ? ".bwproject,.zip" : p.daw === "logic" ? ".zip" : ".flp,.als,.rpp,.song,.bwproject,.zip";
   return html`<section class="panel narrow">
   <p class="muted crumbs"><a href="${projectPath(p)}">${p.name}</a></p>
-  <h1>New commit</h1>
+  <h1>Save a new version</h1>
+  <p class="muted">A save keeps this version of your song forever, so you can always go back to it.</p>
   <form method="post" action="${projectPath(p)}/commit" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="${csrf}">
-    <label for="branch">Branch</label>
-    <select id="branch" name="branch">${branches.map((b) => html`<option value="${b}"${b === branch ? html` selected` : ""}>${b}</option>`)}</select>
-    <label for="message">Message</label>
-    <textarea id="message" name="message" required maxlength="1000" placeholder="brought the bass down, new hat pattern"></textarea>
+    <label for="branch">Save it to</label>
+    <select id="branch" name="branch">${branches.map((b) => html`<option value="${b}"${b === branch ? html` selected` : ""}>${ideaName(b)}</option>`)}</select>
+    <label for="message">What did you change?</label>
+    <textarea id="message" name="message" required maxlength="1000" placeholder="turned the bass down, new hi-hats"></textarea>
     <label for="project">Project file</label>
     <input id="project" name="project" type="file" required accept="${accept}">
-    <p class="hint">${p.daw === "logic" ? "Zip the .logicx package first." : "The file your DAW saves, or its zipped package with samples."}</p>
-    <label for="stems">Stems</label>
+    <p class="hint">${p.daw === "logic" ? "Zip the .logicx package first." : p.daw === "fl-studio" ? "The .flp file FL Studio saves, or the zipped loop package." : "The file your music program saves."}</p>
+    <label for="stems">Instrument tracks (optional)</label>
     <input id="stems" name="stems" type="file" multiple accept=".wav,.flac,.aif,.aiff">
-    <p class="hint">One WAV or FLAC per track, optional.</p>
-    <label for="bounce">Bounce</label>
+    <p class="hint">${KIND_WORDS.stem.hint}</p>
+    <label for="bounce">Full song (optional)</label>
+    <p class="hint">${KIND_WORDS.bounce.hint}</p>
     <input id="bounce" name="bounce" type="file" accept=".wav,.flac,.aif,.aiff,.mp3">
-    <label for="samples">Sample bundle</label>
+    <label for="samples">Samples zip (optional)</label>
     <input id="samples" name="samples" type="file" accept=".zip">
     <p class="hint">Storage used: ${mb(used)} of ${mb(quota)}. A file you already uploaded counts once.</p>
-    <div class="actions"><button type="submit" class="button primary">Commit</button><a class="button quiet" href="${projectPath(p)}">Cancel</a></div>
+    <div class="actions"><button type="submit" class="button primary">Save</button><a class="button quiet" href="${projectPath(p)}">Cancel</a></div>
   </form>
 </section>`;
 }
@@ -123,10 +126,10 @@ const commits: Module = {
     app.get("/p/@:handle/:slug/commit", async (req, reply) => {
       const a = await find(req, deps, Params.parse(req.params));
       if (!a) return reply.callNotFound();
-      if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the project's owner and collaborators can commit.", { href: projectPath(a.project), label: "Back to the project" });
+      if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the song's owner and collaborators can save new versions.", { href: projectPath(a.project), label: "Back to the project" });
       const branches = (await branchesOf(deps.db, a.project.id)).map((b) => b.name);
       const want = String((req.query as { branch?: string }).branch ?? "main");
-      return render(req, reply, deps, { title: `Commit to ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), deps.config.storageQuotaBytes));
+      return render(req, reply, deps, { title: `Save · ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), deps.config.storageQuotaBytes));
     });
 
     await app.register(async (scope) => {
@@ -134,7 +137,7 @@ const commits: Module = {
       scope.post("/p/@:handle/:slug/commit", { bodyLimit: MAX_FILE_BYTES * 4, config: { multipart: true } }, async (req, reply) => {
         const a = await find(req, deps, Params.parse(req.params));
         if (!a) return reply.callNotFound();
-        if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the project's owner and collaborators can commit.", { href: projectPath(a.project), label: "Back to the project" });
+        if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the song's owner and collaborators can save new versions.", { href: projectPath(a.project), label: "Back to the project" });
         const back = { href: `${projectPath(a.project)}/commit`, label: "Back to the form" };
         const limit = await takeLimit(deps.db, "commit", req.user!.id);
         if (!limit.ok) {
@@ -146,11 +149,11 @@ const commits: Module = {
         try {
           const staged = await stage(req, deps, a, dir);
           const message = staged.message.trim().replace(/\r\n/g, "\n");
-          if (!message) throw new Refused(400, "Write a commit message: what changed in this version.");
+          if (!message) throw new Refused(400, "Say what you changed, in a few words.");
           if (message.length > 1000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(message)) throw new Refused(400, "The message must be ordinary text, at most 1000 characters.");
           const projectFiles = staged.files.filter((f) => f.kind === "project");
-          if (projectFiles.length !== 1) throw new Refused(400, "A commit needs exactly one project file.");
-          if (staged.files.filter((f) => f.kind === "bounce").length > 1 || staged.files.filter((f) => f.kind === "samples").length > 1) throw new Refused(400, "One bounce and one sample bundle at most.");
+          if (projectFiles.length !== 1) throw new Refused(400, "Add your project file: every save needs one.");
+          if (staged.files.filter((f) => f.kind === "bounce").length > 1 || staged.files.filter((f) => f.kind === "samples").length > 1) throw new Refused(400, "One full song and one samples zip at most.");
           const names = new Set<string>();
           for (const f of staged.files) {
             const key = `${f.kind}/${f.name}`;
@@ -158,7 +161,7 @@ const commits: Module = {
             names.add(key);
           }
           const branches = await branchesOf(deps.db, a.project.id);
-          if (!branches.some((b) => b.name === staged.branch)) throw new Refused(400, "That branch does not exist.");
+          if (!branches.some((b) => b.name === staged.branch)) throw new Refused(400, "That idea doesn't exist.");
           const adding = await newBytesFor(deps.db, req.user!.id, staged.files);
           const used = await usedBytes(deps.db, req.user!.id);
           if (used + adding > deps.config.storageQuotaBytes) {
@@ -172,7 +175,7 @@ const commits: Module = {
         } catch (error) {
           if (error instanceof Refused) return refuse(req, reply, deps, error.status, error.message, back);
           const code = (error as { code?: string }).code;
-          if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT" || code === "FST_PARTS_LIMIT") return refuse(req, reply, deps, 413, "That is more than one commit accepts.", back);
+          if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT" || code === "FST_PARTS_LIMIT") return refuse(req, reply, deps, 413, "That is more than one save can hold.", back);
           throw error;
         } finally {
           fs.rmSync(dir, { recursive: true, force: true });
@@ -186,7 +189,7 @@ const commits: Module = {
       if (!a) return reply.callNotFound();
       const commit = await getCommit(deps.db, a.project.id, params.id);
       if (!commit) return reply.callNotFound();
-      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.js"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id)));
+      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.js"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id), req.session?.csrfToken));
     });
 
     app.get("/p/@:handle/:slug/c/:id/f/:pos", { config: { public: true } }, async (req, reply) => {
