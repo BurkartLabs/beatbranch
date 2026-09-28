@@ -15,7 +15,7 @@ import { html, type Html } from "../web/html.js";
 import { ideaName, KIND_WORDS } from "../web/words.js";
 import { afterCommit } from "./after.js";
 import { cleanName, judge, MAX_FILE_BYTES, MAX_STEMS, type FileKind } from "./files.js";
-import { createCommit, filesOf, getCommit, newBytesFor, usedBytes, type StagedFile } from "./repo.js";
+import { createCommit, filesOf, getCommit, newBytesFor, quotaFor, usedBytes, type StagedFile } from "./repo.js";
 import { commitView } from "./views.js";
 import { isVerified } from "../social/repo.js";
 
@@ -136,7 +136,7 @@ const commits: Module = {
       const want = String((req.query as { branch?: string }).branch ?? "main");
       const mergeId = String((req.query as { merge?: string }).merge ?? "").slice(0, 40);
       const mergeCommit = mergeId ? await getCommit(deps.db, a.project.id, mergeId) : null;
-      return render(req, reply, deps, { title: `Save · ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), deps.config.storageQuotaBytes, mergeCommit ? { id: mergeCommit.id, idea: mergeCommit.branchName } : null));
+      return render(req, reply, deps, { title: `Save · ${a.project.name}`, styles: ["/static/projects.css"] }, commitForm(a, branches, branches.includes(want) ? want : "main", req.session!.csrfToken, await usedBytes(deps.db, req.user!.id), await quotaFor(deps.db, req.user!.id, deps.config), mergeCommit ? { id: mergeCommit.id, idea: mergeCommit.branchName } : null));
     });
 
     await app.register(async (scope) => {
@@ -172,8 +172,9 @@ const commits: Module = {
           if (!branches.some((b) => b.name === staged.branch)) throw new Refused(400, "That idea doesn't exist.");
           const adding = await newBytesFor(deps.db, req.user!.id, staged.files);
           const used = await usedBytes(deps.db, req.user!.id);
-          if (used + adding > deps.config.storageQuotaBytes) {
-            throw new Refused(413, `That would use ${mb(used + adding)} of your ${mb(deps.config.storageQuotaBytes)}. Nothing was stored.`);
+          const quota = await quotaFor(deps.db, req.user!.id, deps.config);
+          if (used + adding > quota) {
+            throw new Refused(413, `That would use ${mb(used + adding)} of your ${mb(quota)}. Nothing was stored.`);
           }
           const store = storeOf(deps);
           for (const [hash, temp] of staged.temps) await store.putFile(hash, temp);

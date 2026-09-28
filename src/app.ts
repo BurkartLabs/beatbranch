@@ -32,6 +32,7 @@ export interface Deps {
   db: Db;
   config: Config;
   nav: NavItem[];
+  fetch?: typeof fetch;
 }
 
 export interface Module {
@@ -128,7 +129,7 @@ async function loadModules(): Promise<Module[]> {
   return modules;
 }
 
-export async function buildApp(config: Config, db: Db, options: { logStream?: NodeJS.WritableStream } = {}): Promise<FastifyInstance> {
+export async function buildApp(config: Config, db: Db, options: { logStream?: NodeJS.WritableStream; fetch?: typeof fetch } = {}): Promise<FastifyInstance> {
   const serverOptions: FastifyServerOptions = {
     bodyLimit: BODY_LIMIT,
     // Exactly one hop behind Container Apps' ingress, none otherwise (T-094: a hop count trusts nothing in this Fastify).
@@ -158,7 +159,7 @@ export async function buildApp(config: Config, db: Db, options: { logStream?: No
   });
 
   const modules = await loadModules();
-  const deps: Deps = { db, config, nav: modules.flatMap((m) => m.nav ?? []) };
+  const deps: Deps = { db, config, nav: modules.flatMap((m) => m.nav ?? []), ...(options.fetch ? { fetch: options.fetch } : {}) };
 
   await app.register(formbody);
   await app.register(cookie);

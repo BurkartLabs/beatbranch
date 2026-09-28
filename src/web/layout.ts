@@ -1,6 +1,17 @@
 // The page shell every screen renders into: the top bar, the navigation the feature modules register, the flash
 // message and the sign-out form. No inline script or style anywhere (the CSP forbids both).
+import fs from "node:fs";
+import path from "node:path";
 import { html, type Html } from "./html.js";
+import { repoRoot } from "../paths.js";
+
+export const VERSION = (() => {
+  try {
+    return fs.readFileSync(path.join(repoRoot(), "VERSION"), "utf8").trim();
+  } catch {
+    return "0.0.0.0";
+  }
+})();
 
 export interface NavItem {
   href: string;
@@ -85,6 +96,7 @@ ${styles.filter((s) => asset(s, "css")).map((s) => html`<link rel="stylesheet" h
   ${flash ? html`<p class="flash ${flash.kind}" role="${flash.kind === "error" ? "alert" : "status"}">${flash.text}</p>` : ""}
   ${body}
 </main>
+<footer class="site-footer">BeatBranch v${VERSION}</footer>
 ${scripts.filter((s) => asset(s, "js")).map((s) => html`<script src="${s}" defer></script>`)}
 ${scripts.filter((s) => asset(s, "mjs")).map((s) => html`<script type="module" src="${s}"></script>`)}
 </body>

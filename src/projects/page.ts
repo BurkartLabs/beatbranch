@@ -58,7 +58,8 @@ export async function projectPage(req: FastifyRequest, reply: FastifyReply, deps
     deps,
     { title: project.name, styles: ["/static/projects.css", "/static/player.css", "/static/view.css"], scripts: ["/static/branch.js", "/static/player.mjs", "/static/view.js"] },
     html`<section class="project-header">
-  <div>
+  ${project.hasCover ? html`<img class="cover" src="${base}/cover.png" alt="Picture for ${project.name}" width="96" height="96">` : ""}
+  <div class="grow">
     <p class="muted crumbs"><a href="/@${project.ownerHandle}">${project.ownerName}</a> / ${project.name}</p>
     <h1>${project.name} ${visibilityBadge(project)}</h1>
     <p class="artist">by <a href="/@${project.ownerHandle}">${project.ownerName}</a>${forks.source ? html` · a copy of ${forks.source.visible ? html`<a href="/p/@${forks.source.handle}/${forks.source.slug}">${forks.source.name}</a> by @${forks.source.handle}` : "a song that is no longer public"}` : ""}</p>

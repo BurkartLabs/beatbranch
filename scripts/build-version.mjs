@@ -24,6 +24,7 @@ const behindRaw = tryGit("rev-list", "--count", "HEAD..origin/main");
 const behindOrigin = behindRaw !== null && /^\d+$/.test(behindRaw) ? Number(behindRaw) : null;
 
 /** @type {import("../src/version.js").BuildVersion} */
-const manifest = { version: pkg.version, commit, commitShort, date, builtAt: Date.now(), behindOrigin };
+const release = fs.existsSync(path.join(repoRoot, "VERSION")) ? fs.readFileSync(path.join(repoRoot, "VERSION"), "utf8").trim() : pkg.version;
+const manifest = { version: release, commit, commitShort, date, builtAt: Date.now(), behindOrigin };
 fs.writeFileSync(path.join(repoRoot, "version.json"), JSON.stringify(manifest, null, 2) + "\n");
-console.log(`build-version: v${pkg.version} ${commitShort ?? "no git commit found"}${date ? ` (${date})` : ""}${behindOrigin === null ? "" : `, ${behindOrigin} behind origin/main`}`);
+console.log(`build-version: v${release} ${commitShort ?? "no git commit found"}${date ? ` (${date})` : ""}${behindOrigin === null ? "" : `, ${behindOrigin} behind origin/main`}`);

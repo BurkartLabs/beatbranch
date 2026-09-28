@@ -10,6 +10,7 @@ import { z } from "zod";
 import { refuse, render, SESSION_COOKIE, type Deps, type Module } from "../app.js";
 import { checkLimit, clearLimit, countLimit, RATE_LIMITS, retryAfterSeconds, retryWords, takeLimit } from "../limits/limits.js";
 import { errorId, html, type Html } from "../web/html.js";
+import { enabledProviders, PROVIDERS, type Provider } from "../oauth/module.js";
 import { authenticate, createSession, createUser, destroySession, Email, Handle, NewUser, Password, SESSION_IDLE_MS, userIdForEmail } from "./users.js";
 
 /** Where to go after signing in: a path on this site, never another site (an open redirect otherwise). */
@@ -33,11 +34,17 @@ function field(name: keyof FieldErrors, label: string, input: Html, errors: Fiel
   return html`<label for="${name}">${label}</label>${input}${hint ? html`<p class="hint">${hint}</p>` : ""}${err ? html`<p class="field-error" id="${errorId(name)}">${err}</p>` : ""}`;
 }
 
-function registerPage(values: { email?: string; handle?: string; displayName?: string; next?: string }, errors: FieldErrors, csrf: string | undefined): Html {
+function socialButtons(providers: Provider[], next: string | undefined): Html {
+  if (!providers.length) return html``;
+  return html`<div class="social-buttons">${providers.map((p) => html`<a class="button" href="/auth/${p}?next=${encodeURIComponent(next ?? "/")}">Continue with ${PROVIDERS[p].name}</a>`)}</div><p class="muted or">or</p>`;
+}
+
+function registerPage(values: { email?: string; handle?: string; displayName?: string; next?: string }, errors: FieldErrors, csrf: string | undefined, providers: Provider[] = []): Html {
   const aria = (n: keyof FieldErrors) => (errors[n] ? html` aria-invalid="true" aria-describedby="${errorId(n)}"` : "");
   return html`<section class="panel narrow">
   <h1>Create your account</h1>
-  <p class="muted">Your handle is your page: beatbranch/@handle. Projects you make can be public, unlisted or private.</p>
+  <p class="muted">Your handle is your page: beatbranch/@handle. Songs you make can be public, unlisted or private.</p>
+  ${socialButtons(providers, values.next)}
   <form method="post" action="/register" novalidate>
     ${csrf ? html`<input type="hidden" name="_csrf" value="${csrf}">` : ""}
     <input type="hidden" name="next" value="${values.next ?? "/"}">
@@ -50,9 +57,10 @@ function registerPage(values: { email?: string; handle?: string; displayName?: s
 </section>`;
 }
 
-function loginPage(values: { email?: string; next?: string }, error: string | undefined, csrf: string | undefined): Html {
+function loginPage(values: { email?: string; next?: string }, error: string | undefined, csrf: string | undefined, providers: Provider[] = []): Html {
   return html`<section class="panel narrow">
   <h1>Sign in</h1>
+  ${socialButtons(providers, values.next)}
   <form method="post" action="/login" novalidate>
     ${csrf ? html`<input type="hidden" name="_csrf" value="${csrf}">` : ""}
     <input type="hidden" name="next" value="${values.next ?? "/"}">
@@ -98,7 +106,7 @@ const auth: Module = {
       if (req.user) return reply.redirect("/", 303);
       if (deps.config.signup === "closed") return refuse(req, reply, deps, 403, "Registration is closed for now.", { href: "/login", label: "Sign in" });
       const q = req.query as { next?: string };
-      return render(req, reply, deps, { title: "Create your account", current: "/register" }, registerPage({ next: safeNext(q.next) }, {}, undefined));
+      return render(req, reply, deps, { title: "Create your account", current: "/register" }, registerPage({ next: safeNext(q.next) }, {}, undefined, enabledProviders(deps)));
     });
 
     app.post("/register", { config: { public: true } }, async (req, reply) => {
@@ -129,7 +137,7 @@ const auth: Module = {
     app.get("/login", { config: { public: true } }, async (req, reply) => {
       if (req.user) return reply.redirect("/", 303);
       const q = req.query as { next?: string };
-      return render(req, reply, deps, { title: "Sign in", current: "/login" }, loginPage({ next: safeNext(q.next) }, undefined, undefined));
+      return render(req, reply, deps, { title: "Sign in", current: "/login" }, loginPage({ next: safeNext(q.next) }, undefined, undefined, enabledProviders(deps)));
     });
 
     app.post("/login", { config: { public: true } }, async (req, reply) => {

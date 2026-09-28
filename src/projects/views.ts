@@ -19,6 +19,7 @@ export function visibilityBadge(p: Pick<Project, "visibility">): Html {
 
 export function projectCard(p: Project, options: { showArtist?: boolean } = {}): Html {
   return html`<article class="card project-card">
+  ${p.hasCover ? html`<a href="${projectPath(p)}" tabindex="-1" aria-hidden="true"><img class="card-cover" src="${projectPath(p)}/cover.png" alt="" loading="lazy" width="512" height="512"></a>` : ""}
   <h3><a href="${projectPath(p)}">${p.name}</a> ${visibilityBadge(p)}</h3>
   ${options.showArtist === false ? "" : html`<p class="muted">by <a href="/@${p.ownerHandle}">${p.ownerName}</a></p>`}
   <p class="meta"><span>${dawName(p.daw)}</span><span>${stateName(p.state)}</span>${p.bpm ? html`<span>${String(p.bpm)} BPM</span>` : ""}${p.genre ? html`<span>${p.subgenre ? `${p.genre} · ${p.subgenre}` : p.genre}</span>` : ""}</p>

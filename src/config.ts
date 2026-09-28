@@ -29,6 +29,7 @@ export interface Config {
   azureBlobContainer: string;
   /** Per-account storage quota in bytes (AB#2834; Decision AB#4686's default: 2 GiB). */
   storageQuotaBytes: number;
+  storageQuotaPlusBytes: number;
   /** How long a blob URL stays valid (AB#2845). */
   blobUrlTtlSeconds: number;
   versionFile: string;
@@ -53,6 +54,7 @@ const Env = z.object({
   AZURE_STORAGE_ACCOUNT: z.string().regex(/^[a-z0-9]{3,24}$/).optional(),
   AZURE_BLOB_CONTAINER: z.string().regex(/^[a-z0-9-]{3,63}$/).default("blobs"),
   STORAGE_QUOTA_BYTES: z.coerce.number().int().min(1).default(2 * GIB),
+  STORAGE_QUOTA_PLUS_BYTES: z.coerce.number().int().min(1).default(50 * GIB),
   BLOB_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
   VERSION_FILE: z.string().min(1).optional()
 });
@@ -81,6 +83,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     azureStorageAccount: e.AZURE_STORAGE_ACCOUNT,
     azureBlobContainer: e.AZURE_BLOB_CONTAINER,
     storageQuotaBytes: e.STORAGE_QUOTA_BYTES,
+    storageQuotaPlusBytes: e.STORAGE_QUOTA_PLUS_BYTES,
     blobUrlTtlSeconds: e.BLOB_URL_TTL_SECONDS,
     versionFile: path.resolve(e.VERSION_FILE ?? path.join(repoRoot(), "version.json"))
   };
