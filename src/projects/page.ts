@@ -3,22 +3,18 @@ import { render, type Deps } from "../app.js";
 import { history } from "../commits/repo.js";
 import { commitList } from "../commits/views.js";
 import { html, type Html } from "../web/html.js";
+import { hooks } from "../hooks.js";
 import { divergence } from "../branches/repo.js";
 import { ideaName, plural } from "../web/words.js";
 import { dawName, stateName } from "./catalogue.js";
 import { branchesOf, tagsOf, type Access, type Branch } from "./repo.js";
 import { dayOf, projectPath, visibilityBadge } from "./views.js";
 
-export type BranchPanel = (deps: Deps, a: Access, branch: Branch, req: FastifyRequest) => Promise<Html>;
-const panels: BranchPanel[] = [];
-export function addBranchPanel(p: BranchPanel): void {
-  panels.push(p);
-}
 
 async function branchBody(deps: Deps, a: Access, branch: Branch, req: FastifyRequest): Promise<Html> {
   const list = await history(deps.db, branch.headCommitId);
   const extra: Html[] = [];
-  for (const p of panels) extra.push(await p(deps, a, branch, req));
+  for (const p of hooks(deps).branchPanels) extra.push(await p(deps, a, branch, req));
   let note: Html = html``;
   if (branch.name !== "main") {
     const main = (await branchesOf(deps.db, a.project.id)).find((b) => b.name === "main");
