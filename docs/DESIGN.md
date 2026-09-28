@@ -1,8 +1,31 @@
 # BeatBranch — GitHub for music producers
 
-**Portfolio status:** stage Brief, kind `saas`, registered 2026-09-26 at the Board's instruction. The Board named
-the user it is for: their younger brother, a producer. Design document, repository and epic only; no story is
-agent-ready until the Board moves the stage.
+**Portfolio status:** stage Build since 2026-09-27, kind `saas`. The Board named the user it is for: their younger
+brother, a producer.
+
+## Words we use (Board, 2026-09-27: "dumbed down so a 5 year old could understand it")
+
+Version control is a developer's idea, and its words confuse everyone else. Every screen, message and new work item
+uses the plain word on the left. The developer word on the right stays in code, URLs and this document only.
+
+| On screen | In the code | What it means to a producer |
+|---|---|---|
+| a save / Save a new version | commit | a copy of the song kept forever, so you can always go back |
+| What did you change? | commit message | a few words about this version |
+| an idea / Try a new idea | branch | a copy where you try something without changing the Main version |
+| the Main version | `main` | the song as it is now |
+| Use this idea in the Main version | merge | keep what you tried |
+| Use the idea as it is / Pick instruments from each / Combine them yourself | take-branch / per-track / manual merge | the three ways to keep an idea |
+| brought an idea in | merge commit (two parents) | a save that combined two versions |
+| Throw this idea away | abandon / delete branch | stop trying it |
+| What changed | diff / compare | the differences between two saves |
+| How the song grew | commit graph | every save and idea, as a picture |
+| Make my own copy | fork | take a public song and change it yourself |
+| Release this version | tag a release | mark a save as finished, with its full song |
+| Instrument tracks | stems | one audio file per instrument |
+| Full song | bounce | the whole mix as one audio file |
+| Samples zip | sample bundle | the sounds a project uses |
+| People / Can save new versions / Can listen and comment | members / collaborator / listener | who's on the song |
 
 ## One sentence
 
