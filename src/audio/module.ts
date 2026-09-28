@@ -22,13 +22,36 @@ export async function peaksOf(db: Db, hash: string): Promise<{ durationMs: numbe
 }
 
 export async function makePeaks(deps: Deps, hash: string, file: string): Promise<void> {
-  if (await peaksOf(deps.db, hash)) return;
-  const r = await runSandboxed<{ ok: true; durationMs: number; peaks: number[] } | { ok: false; reason: string }>("../audio/worker", { kind: "peaks", file });
-  if (!r.ok) return;
-  await deps.db.run("INSERT INTO audio_peaks (blob_hash, duration_ms, peaks, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (blob_hash) DO NOTHING", [hash, r.durationMs, JSON.stringify(r.peaks), Date.now()]);
+  if ((await peaksOf(deps.db, hash)) && (await deps.db.get("SELECT 1 AS x FROM audio_playable WHERE blob_hash = ?", [hash]))) return;
+  const dir = path.join(deps.config.dataDir, "tmp", crypto.randomUUID());
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    const out = path.join(dir, "playable.wav");
+    const r = await runSandboxed<{ ok: true; transcoded: boolean; durationMs: number; peaks: number[] } | { ok: false; reason: string }>("../audio/worker", { kind: "prepare", file, out });
+    if (!r.ok) {
+      await deps.db.run("INSERT INTO audio_playable (blob_hash, playable_hash, reason, created_at) VALUES (?, NULL, ?, ?) ON CONFLICT (blob_hash) DO UPDATE SET playable_hash = NULL, reason = EXCLUDED.reason", [hash, r.reason, Date.now()]);
+      return;
+    }
+    let playable = hash;
+    if (r.transcoded) {
+      const data = fs.readFileSync(out);
+      playable = crypto.createHash("sha256").update(data).digest("hex");
+      await storeOf(deps).putFile(playable, out);
+      await deps.db.run("INSERT INTO blobs (hash, size, created_at) VALUES (?, ?, ?) ON CONFLICT (hash) DO NOTHING", [playable, data.length, Date.now()]);
+    }
+    await deps.db.run("INSERT INTO audio_playable (blob_hash, playable_hash, reason, created_at) VALUES (?, ?, '', ?) ON CONFLICT (blob_hash) DO UPDATE SET playable_hash = EXCLUDED.playable_hash, reason = ''", [hash, playable, Date.now()]);
+    await deps.db.run("INSERT INTO audio_peaks (blob_hash, duration_ms, peaks, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (blob_hash) DO UPDATE SET duration_ms = EXCLUDED.duration_ms, peaks = EXCLUDED.peaks", [hash, r.durationMs, JSON.stringify(r.peaks), Date.now()]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
-async function makePreview(deps: Deps, commitId: string, zips: string[]): Promise<void> {
+export async function playableOf(db: Db, hash: string): Promise<{ hash: string | null; reason: string } | null> {
+  const r = await db.get<{ playable_hash: string | null; reason: string }>("SELECT playable_hash, reason FROM audio_playable WHERE blob_hash = ?", [hash]);
+  return r ? { hash: r.playable_hash, reason: r.reason } : null;
+}
+
+export async function makePreview(deps: Deps, commitId: string, zips: string[]): Promise<void> {
   const raw = await modelOf(deps.db, commitId);
   const m = Model.safeParse(raw);
   if (!m.success) return;
@@ -67,7 +90,7 @@ export function player(tracks: PlayerTrack[], options: { title: string; mode?: "
   <div class="row space"><h2>${options.title}</h2>
     <div class="transport">
       <button class="button primary play" type="button" aria-label="Play">Play</button>
-      <span class="time mono" aria-live="off">0:00 / ${clock(duration)}</span>
+      <span class="time mono" aria-live="off">${duration < 10000 ? `0.0s / ${(duration / 1000).toFixed(1)}s` : `0:00 / ${clock(duration)}`}</span>
       ${mode === "ab" ? html`<span class="ab" role="group" aria-label="Which version to hear"><button class="button ab-a" type="button" aria-pressed="true">A: before</button><button class="button ab-b" type="button" aria-pressed="false">B: after</button></span>` : ""}
       <label class="master-label">Volume <input class="master" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volume for everything"></label>
     </div>
@@ -92,16 +115,30 @@ export async function tracksFor(deps: Deps, a: Access, c: Commit, files: CommitF
   const base = `${projectPath(a.project)}/c/${c.id}`;
   const stems = files.filter((f) => f.kind === "stem" && f.contentType.startsWith("audio/"));
   const bounce = files.find((f) => f.kind === "bounce" && f.contentType.startsWith("audio/"));
+  const unplayable: string[] = [];
   const build = async (list: CommitFile[]) => {
     const out: PlayerTrack[] = [];
     for (const f of list) {
+      const play = await playableOf(deps.db, f.hash);
+      if (play && !play.hash) {
+        unplayable.push(f.name);
+        continue;
+      }
       const p = await peaksOf(deps.db, f.hash);
       out.push({ name: f.name.replace(/\.(wav|flac|aiff?|mp3)$/i, ""), src: `${base}/f/${f.position}?play=1`, peaks: p?.peaks ?? [], durationMs: p?.durationMs ?? 0 });
     }
     return out;
   };
-  if (stems.length) return { tracks: await build(stems), kind: "stems", reason: "" };
-  if (bounce) return { tracks: await build([bounce]), kind: "bounce", reason: "" };
+  const cant = () => (unplayable.length ? `BeatBranch can't play ${unplayable.join(", ")}: ${unplayable.length === 1 ? "it's" : "they're"} in a format browsers don't understand.` : "");
+  if (stems.length) {
+    const tracks = await build(stems);
+    if (tracks.length) return { tracks, kind: "stems", reason: cant() };
+  }
+  if (bounce) {
+    const tracks = await build([bounce]);
+    if (tracks.length) return { tracks, kind: "bounce", reason: cant() };
+  }
+  if (unplayable.length) return { tracks: [], kind: "none", reason: cant() };
   const pv = await deps.db.get<{ blob_hash: string | null; reason: string }>("SELECT blob_hash, reason FROM commit_previews WHERE commit_id = ?", [c.id]);
   if (pv?.blob_hash) {
     const p = await peaksOf(deps.db, pv.blob_hash);
@@ -115,7 +152,8 @@ export async function listenPanel(deps: Deps, a: Access, c: Commit, files: Commi
   if (t.kind === "none") {
     return t.reason ? html`<section class="panel"><h2>${title}</h2><p class="muted">${t.reason}</p></section>` : html``;
   }
-  const note = t.kind === "preview" ? html`<p class="muted">A rough mix BeatBranch made from the project's sounds. Effects aren't included.</p>` : t.kind === "bounce" ? html`` : html``;
+  const short = t.kind === "stems" && t.tracks.every((x) => x.durationMs > 0 && x.durationMs < 3000);
+  const note = html`${t.kind === "preview" ? html`<p class="muted">A rough mix BeatBranch made from the project's sounds. Effects aren't included.</p>` : ""}${short ? html`<p class="flash ok">These instrument tracks are only a few seconds long, so they sound like single sounds, not parts of the song. To hear the whole song here, export it from your music program${a.project.daw === "fl-studio" ? " (in FL Studio: File › Export › WAV file; tick “Split mixer tracks” to get one file per instrument)" : ""} and save a new version with those files.</p>` : ""}${t.reason ? html`<p class="muted">${t.reason}</p>` : ""}`;
   return player(t.tracks, { title, note, ...(comments ? { comments } : {}) });
 }
 

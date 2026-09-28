@@ -101,11 +101,12 @@ function setup(root) {
     }
   });
   const now = () => (ctx ? ctx.currentTime : 0);
-  const length = () => (buffers ? Math.max(...buffers.map((b) => b.duration)) : duration);
+  const length = () => (buffers ? Math.max(0, ...buffers.filter(Boolean).map((b) => b.duration)) : duration);
   const paint = () => {
     const p = length() ? t.position(now()) / length() : 0;
     items.forEach((li, i) => drawWave(li.querySelector("canvas"), peaks[i], p));
-    if (time) time.textContent = `${clock(t.position(now()))} / ${clock(length())}`;
+    const fmt = (x) => (length() < 10 ? `${x.toFixed(1)}s` : clock(x));
+    if (time) time.textContent = `${fmt(Math.min(t.position(now()), length()))} / ${fmt(length())}`;
   };
   const applyGains = () => {
     const g = t.gains();
@@ -128,7 +129,13 @@ function setup(root) {
     loading = Promise.all(items.map((li) => fetch(li.dataset.src, { credentials: "same-origin" }).then((r) => {
       if (!r.ok) throw new Error(String(r.status));
       return r.arrayBuffer();
-    }).then((ab) => ctx.decodeAudioData(ab)))).then((bs) => {
+    }).then((ab) => ctx.decodeAudioData(ab)).catch(() => {
+      li.classList.add("failed");
+      const name = li.querySelector(".stem-name");
+      if (name) name.textContent = `${name.textContent} (can't play)`;
+      return null;
+    }))).then((bs) => {
+      if (!bs.some(Boolean)) throw new Error("nothing playable");
       buffers = bs;
       gainNodes = bs.map(() => {
         const g = ctx.createGain();
@@ -153,12 +160,13 @@ function setup(root) {
     const offset = t.offset;
     t.startedAt = at;
     sources = buffers.map((b, i) => {
+      if (!b) return null;
       const s = ctx.createBufferSource();
       s.buffer = b;
       s.connect(gainNodes[i]);
       if (offset < b.duration) s.start(at, offset);
       return s;
-    });
+    }).filter(Boolean);
   };
   const play = async () => {
     playBtn.disabled = true;
@@ -166,7 +174,8 @@ function setup(root) {
     try {
       await load();
     } catch {
-      playBtn.textContent = "Couldn't load";
+      playBtn.textContent = "Can't play";
+      loading = null;
       return;
     }
     await ctx.resume();

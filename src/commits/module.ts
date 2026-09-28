@@ -18,6 +18,7 @@ import { cleanName, judge, MAX_FILE_BYTES, MAX_STEMS, type FileKind } from "./fi
 import { createCommit, filesOf, getCommit, newBytesFor, quotaFor, usedBytes, type StagedFile } from "./repo.js";
 import { commitView } from "./views.js";
 import { isVerified } from "../social/repo.js";
+import { playableOf } from "../audio/module.js";
 
 const Params = z.object({ handle: z.string().max(30), slug: z.string().max(80) });
 const CommitParams = Params.extend({ id: z.string().max(40) });
@@ -50,11 +51,12 @@ function commitForm(a: Access, branches: string[], branch: string, csrf: string,
     <p class="hint">${p.daw === "logic" ? "Zip the .logicx package first." : p.daw === "fl-studio" ? "The .flp file FL Studio saves, or the zipped loop package." : "The file your music program saves."}</p>
     <label for="stems">Instrument tracks (optional)</label>
     <input id="stems" name="stems" type="file" multiple accept=".wav,.flac,.aif,.aiff">
-    <p class="hint">${KIND_WORDS.stem.hint}</p>
+    <p class="hint">${p.daw === "fl-studio" ? "The whole song, one file per instrument. In FL Studio: File › Export › WAV file, and tick “Split mixer tracks”. Not single samples: those go in the samples zip." : KIND_WORDS.stem.hint}</p>
     <label for="bounce">Full song (optional)</label>
-    <p class="hint">${KIND_WORDS.bounce.hint}</p>
+    <p class="hint">${p.daw === "fl-studio" ? "The whole song as one file. In FL Studio: File › Export › WAV file (or MP3)." : KIND_WORDS.bounce.hint}</p>
     <input id="bounce" name="bounce" type="file" accept=".wav,.flac,.aif,.aiff,.mp3">
     <label for="samples">Samples zip (optional)</label>
+    <p class="hint">${p.daw === "fl-studio" ? "The sounds your project uses. In FL Studio: File › Export › Zipped loop package." : KIND_WORDS.samples.hint}</p>
     <input id="samples" name="samples" type="file" accept=".zip">
     <p class="hint">Storage used: ${mb(used)} of ${mb(quota)}. A file you already uploaded counts once.</p>
     <div class="actions"><button type="submit" class="button primary">Save</button><a class="button quiet" href="${projectPath(p)}">Cancel</a></div>
@@ -216,7 +218,17 @@ const commits: Module = {
       const file = (await filesOf(deps.db, commit.id)).find((f) => f.position === params.pos);
       if (!file) return reply.callNotFound();
       const inline = (req.query as { play?: string }).play === "1" && file.contentType.startsWith("audio/");
-      const url = await storeOf(deps).signedUrl(file.hash, { filename: file.name, contentType: inline ? file.contentType : "application/octet-stream", userId: req.user?.id ?? null, ttlSeconds: deps.config.blobUrlTtlSeconds, inline });
+      let hash = file.hash;
+      let type = file.contentType;
+      if (inline) {
+        const play = await playableOf(deps.db, file.hash);
+        if (play && !play.hash) return reply.code(415).type("text/plain; charset=utf-8").send("This audio file is in a format BeatBranch can't play.");
+        if (play?.hash && play.hash !== file.hash) {
+          hash = play.hash;
+          type = "audio/wav";
+        }
+      }
+      const url = await storeOf(deps).signedUrl(hash, { filename: file.name, contentType: inline ? type : "application/octet-stream", userId: req.user?.id ?? null, ttlSeconds: deps.config.blobUrlTtlSeconds, inline });
       return reply.redirect(url, 303);
     });
 

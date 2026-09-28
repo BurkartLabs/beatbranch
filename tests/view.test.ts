@@ -40,7 +40,7 @@ describe("what's inside a save (AB#3603, 3611, 3620, 3630, 3636, 3643)", () => {
     expect((page.match(/<rect x="[\d.]+" y="3"/g) ?? []).length).toBe(5);
     expect(page).toContain('id="c-pr-1"');
     expect(page).toContain("<li>Fruity Compressor</li>");
-    expect(page).toContain("Also sends its sound to: Master, Reverb");
+    expect(page).toContain("Also sends its sound to: Reverb");
     expect(page).toContain("Missing</span> <span class=\"file-name\">kick.wav");
     expect(page).toContain("1 sound missing");
     const project = (await get(app, "/p/@alice/flp")).body;

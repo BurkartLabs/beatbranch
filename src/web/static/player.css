@@ -21,6 +21,8 @@
 .stem-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; }
 .stem .wave { width: 100%; height: 56px; cursor: pointer; background: var(--surface-2); border-radius: 6px; grid-column: 4; }
 .stem.silent .wave { opacity: 0.35; }
+.stem.failed .wave { opacity: 0.2; }
+.stem.failed .stem-name { color: var(--error); }
 .stem .button { padding: 0.25rem 0.55rem; font-size: 0.85rem; }
 .stem .button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
 .ab .button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: transparent; }

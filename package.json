@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.check.json",
     "test": "node scripts/test-strict.mjs",
     "check": "npm run typecheck && npm test",
-    "look": "npm run build && node scripts/look.mjs"
+    "look": "npm run build && node scripts/look.mjs",
+    "reprocess": "npm run build && node dist/src/cli/reprocess.js"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",
