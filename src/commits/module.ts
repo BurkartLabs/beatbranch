@@ -17,10 +17,12 @@ import { afterCommit } from "./after.js";
 import { cleanName, judge, MAX_FILE_BYTES, MAX_STEMS, type FileKind } from "./files.js";
 import { createCommit, filesOf, getCommit, newBytesFor, usedBytes, type StagedFile } from "./repo.js";
 import { commitView } from "./views.js";
+import { isVerified } from "../social/repo.js";
 
 const Params = z.object({ handle: z.string().max(30), slug: z.string().max(80) });
 const CommitParams = Params.extend({ id: z.string().max(40) });
 const FileParams = CommitParams.extend({ pos: z.coerce.number().int().min(0).max(1000) });
+export const WAITING = "Your account is waiting to be approved before you can upload. Joining a song through an invite link approves it straight away.";
 const FIELD_KINDS: Record<string, FileKind> = { project: "project", stems: "stem", bounce: "bounce", samples: "samples" };
 
 export const mb = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : `${(n / 1024 ** 2).toFixed(1)} MB`);
@@ -139,6 +141,7 @@ const commits: Module = {
         if (!a) return reply.callNotFound();
         if (!a.canEdit) return refuse(req, reply, deps, 403, "Only the song's owner and collaborators can save new versions.", { href: projectPath(a.project), label: "Back to the project" });
         const back = { href: `${projectPath(a.project)}/commit`, label: "Back to the form" };
+        if (!(await isVerified(deps.db, req.user!.id))) return refuse(req, reply, deps, 403, WAITING, { href: projectPath(a.project), label: "Back to the song" });
         const limit = await takeLimit(deps.db, "commit", req.user!.id);
         if (!limit.ok) {
           reply.header("Retry-After", retryAfterSeconds(limit.retryAt));
@@ -189,7 +192,7 @@ const commits: Module = {
       if (!a) return reply.callNotFound();
       const commit = await getCommit(deps.db, a.project.id, params.id);
       if (!commit) return reply.callNotFound();
-      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.js"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id), req));
+      return render(req, reply, deps, { title: `${commit.message.split("\n")[0]} · ${a.project.name}`, styles: ["/static/projects.css", "/static/player.css"], scripts: ["/static/player.mjs"] }, await commitView(deps, a, commit, await filesOf(deps.db, commit.id), req));
     });
 
     app.get("/p/@:handle/:slug/c/:id/f/:pos", { config: { public: true } }, async (req, reply) => {

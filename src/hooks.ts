@@ -10,6 +10,7 @@ export type BranchPanel = (deps: Deps, a: Access, branch: Branch, req: FastifyRe
 
 export interface Hooks {
   commit: CommitHook[];
+  lateCommit: CommitHook[];
   commitExtras: CommitExtra[];
   branchPanels: BranchPanel[];
 }
@@ -19,7 +20,7 @@ const registry = new WeakMap<object, Hooks>();
 export function hooks(deps: Deps): Hooks {
   let h = registry.get(deps);
   if (!h) {
-    h = { commit: [], commitExtras: [], branchPanels: [] };
+    h = { commit: [], lateCommit: [], commitExtras: [], branchPanels: [] };
     registry.set(deps, h);
   }
   return h;
