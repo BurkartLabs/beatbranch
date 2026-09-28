@@ -174,11 +174,12 @@ export async function buildApp(config: Config, db: Db, options: { logStream?: No
   app.decorateRequest("session", null);
   app.decorateRequest("sessionToken", undefined);
 
+  const blobOrigin = config.blobStore === "azure" && config.azureStorageAccount ? ` https://${config.azureStorageAccount}.blob.core.windows.net` : "";
   // Security headers on every response, the 404 included (T-102).
   app.addHook("onSend", async (req, reply) => {
     reply.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+      `default-src 'self'; img-src 'self' data:; media-src 'self' blob:${blobOrigin}; connect-src 'self'${blobOrigin}; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com https://discord.com; frame-ancestors 'none'`
     );
     reply.header("X-Content-Type-Options", "nosniff");
     reply.header("Referrer-Policy", "same-origin");
