@@ -1,0 +1,14 @@
+.commits { list-style: none; margin: 0; padding: 0; }
+.commit { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--line); }
+.commit:first-child { border-top: 0; }
+.commit-title { color: var(--text); font-weight: 600; text-decoration: none; }
+.commit-title:hover { text-decoration: underline; }
+.commit-meta { margin: 0.1rem 0 0; font-size: 0.9rem; }
+.sha { font-size: 0.85rem; color: var(--muted); text-decoration: none; padding: 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; }
+.commit-heading { font-size: 1.4rem; }
+.files { list-style: none; margin: 0; padding: 0; }
+.files li { display: grid; grid-template-columns: 8rem 1fr auto auto; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-top: 1px solid var(--line); }
+.files li:first-child { border-top: 0; }
+.file-kind { color: var(--muted); font-size: 0.9rem; }
+.file-name { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .files li { grid-template-columns: 1fr auto; } .file-kind { grid-column: 1 / -1; } }
