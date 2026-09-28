@@ -1,7 +1,7 @@
 # BRIEF — beatbranch
 
 Size: L (preview M)
-Stage: Brief
+Stage: Build (since 2026-09-27; Decisions AB#4684, AB#4685, AB#4686 answered)
 Scorecard: the RUBRIC gate table in [docs/DESIGN.md](docs/DESIGN.md)
 
 ## One sentence

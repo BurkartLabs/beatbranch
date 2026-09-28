@@ -165,11 +165,17 @@ Board's brother pays nothing. A Monetization Critic review before Live.
 Size **L** honestly; the preview that the brother would use is S1–S4 (**M**), with S5–S6 the second milestone.
 Carrying an L needs the Board's word (precedent AB#353); the Board's instruction to build it is taken as that.
 
-## Decisions for the Board
+## Decisions for the Board (answered 2026-09-27, Board session)
 
-1. Storage budget and quota per user (Azure Blob spend).
-2. Which DAW the brother uses — it decides the first parser and the first companion target.
-3. Whether public projects exist at preview or everything is invite-only until moderation exists.
+1. **Storage budget and hosting** (AB#4686): *deploy to Azure from the first PR*, on the job-hunt hosting pattern
+   (Container App in `orch-env`, PostgreSQL Flexible Server B1ms, a Blob Storage account with per-object SAS). No
+   storage number was named; the session's default, open to veto: **2 GB per account** at preview, and a cost alert
+   on the storage account. Retail prices in Canada Central, read 2026-09-27 from the Azure Retail Prices API: B1ms
+   compute $0.0185/hour (about $13.50/month), Hot LRS blob storage $0.02/GB/month.
+2. **The brother's DAW** (AB#4684): **FL Studio (.flp)**. S2 starts with the `pyflp` worker; Ableton follows.
+3. **Public projects at preview** (AB#4685): **public from day one**. Open registration, public/unlisted/private
+   visibility, a report button and an owner-side takedown path are in S1 (AB#3748 moves into S1); the two-account
+   probe (AB#3765) gates it.
 
 ## Out of scope
 
