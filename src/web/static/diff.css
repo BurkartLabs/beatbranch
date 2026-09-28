@@ -1,0 +1,17 @@
+.compare-form select { font-size: 0.92rem; }
+.diff-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.diff-group h3 { margin-bottom: 0.35rem; }
+.diff-group ul { list-style: none; margin: 0; padding: 0; }
+.diff-group li { padding: 0.2rem 0; }
+.diff-mark { display: inline-block; width: 1.2rem; font-weight: 700; text-align: center; }
+.diff-added .diff-mark { color: var(--ok); }
+.diff-removed .diff-mark { color: var(--error); }
+.diff-changed .diff-mark, .diff-renamed .diff-mark { color: var(--warn); }
+.badge-added { background: var(--ok-soft); color: var(--ok); }
+.badge-removed { background: var(--error-soft); color: var(--error); }
+.badge-same { background: var(--surface-2); color: var(--muted); }
+.file-same { opacity: 0.7; }
+.stem-diff { margin-top: 0.75rem; }
+.mini-wave { margin: 0; background: var(--surface-2); border-radius: 6px; padding: 0.35rem 0.5rem; }
+.mini-wave figcaption { font-size: 0.8rem; color: var(--muted); }
+.wave-path { stroke: var(--accent); stroke-width: 1; fill: none; }

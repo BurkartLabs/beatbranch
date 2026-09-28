@@ -27,3 +27,8 @@
 .badge-ok { background: var(--ok-soft); color: var(--ok); }
 .badge-missing { background: var(--error-soft); color: var(--error); }
 @media (max-width: 600px) { .lanes { grid-template-columns: 7rem 1fr; } }
+.lane-changed .lane-name, .lane-changed .lane-track { background: var(--warn-soft); }
+.lane-added .lane-name, .lane-added .lane-track { background: var(--ok-soft); }
+.badge-changed { background: var(--warn-soft); color: var(--warn); }
+.lane:not(.lane-changed):not(.lane-added) .lane-svg { opacity: 0.45; }
+.lanes:not(:has(.lane-changed, .lane-added)) .lane-svg { opacity: 1; }
